@@ -2,9 +2,16 @@ package com.debanshu.xcalendar.di
 
 import com.debanshu.xcalendar.data.localDataSource.AppDatabase
 import com.debanshu.xcalendar.data.localDataSource.CalendarDao
+import com.debanshu.xcalendar.data.localDataSource.CalendarSourceDao
 import com.debanshu.xcalendar.data.localDataSource.EventDao
+import com.debanshu.xcalendar.data.localDataSource.GoogleAccountDao
 import com.debanshu.xcalendar.data.localDataSource.HolidayDao
+import com.debanshu.xcalendar.data.localDataSource.InboxItemDao
+import com.debanshu.xcalendar.data.localDataSource.PersonDao
+import com.debanshu.xcalendar.data.localDataSource.ProjectDao
+import com.debanshu.xcalendar.data.localDataSource.RoutineDao
 import com.debanshu.xcalendar.data.localDataSource.SyncFailureDao
+import com.debanshu.xcalendar.data.localDataSource.TaskDao
 import com.debanshu.xcalendar.data.localDataSource.UserDao
 import com.debanshu.xcalendar.data.store.EventBookkeeperFactory
 import com.debanshu.xcalendar.data.store.EventKey
@@ -89,6 +96,10 @@ class DataModule {
         appDatabase.getCalendarEntityDao()
 
     @Single
+    fun getCalendarSourceDao(appDatabase: AppDatabase): CalendarSourceDao =
+        appDatabase.getCalendarSourceDao()
+
+    @Single
     fun getEventEntityDao(appDatabase: AppDatabase): EventDao = appDatabase.getEventEntityDao()
 
     @Single
@@ -98,6 +109,25 @@ class DataModule {
     @Single
     fun getSyncFailureDao(appDatabase: AppDatabase): SyncFailureDao =
         appDatabase.getSyncFailureDao()
+
+    @Single
+    fun getPersonDao(appDatabase: AppDatabase): PersonDao = appDatabase.getPersonDao()
+
+    @Single
+    fun getTaskDao(appDatabase: AppDatabase): TaskDao = appDatabase.getTaskDao()
+
+    @Single
+    fun getRoutineDao(appDatabase: AppDatabase): RoutineDao = appDatabase.getRoutineDao()
+
+    @Single
+    fun getProjectDao(appDatabase: AppDatabase): ProjectDao = appDatabase.getProjectDao()
+
+    @Single
+    fun getInboxItemDao(appDatabase: AppDatabase): InboxItemDao = appDatabase.getInboxItemDao()
+
+    @Single
+    fun getGoogleAccountDao(appDatabase: AppDatabase): GoogleAccountDao =
+        appDatabase.getGoogleAccountDao()
 
     @Single
     fun provideHolidayStore(
@@ -147,6 +177,26 @@ class ViewModelModule
 class DomainModule
 
 @Module
+@ComponentScan("com.debanshu.xcalendar.domain.auth")
+class AuthModule
+
+@Module
+@ComponentScan("com.debanshu.xcalendar.domain.llm")
+class LlmModule
+
+@Module
+@ComponentScan("com.debanshu.xcalendar.domain.sync")
+class SyncModule
+
+@Module
+@ComponentScan("com.debanshu.xcalendar.domain.notifications")
+class NotificationsModule
+
+@Module
+@ComponentScan("com.debanshu.xcalendar.domain.widgets")
+class WidgetsModule
+
+@Module
 @ComponentScan("com.debanshu.xcalendar.domain.usecase")
 class UseCaseModule
 
@@ -154,9 +204,15 @@ class UseCaseModule
 @ComponentScan("com.debanshu.xcalendar.domain.states")
 class StateModule
 
+@Module
+@ComponentScan("com.debanshu.xcalendar.ui.state")
+class UiStateModule
+
 @Module(
     includes = [PlatformModule::class, DataModule::class, ViewModelModule::class,
-        DomainModule::class, UseCaseModule::class, StateModule::class]
+        DomainModule::class, AuthModule::class, LlmModule::class, SyncModule::class,
+        NotificationsModule::class, WidgetsModule::class,
+        UseCaseModule::class, StateModule::class, UiStateModule::class]
 )
 class AppModule
 

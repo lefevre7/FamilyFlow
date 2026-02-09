@@ -1,7 +1,16 @@
 package com.debanshu.xcalendar.domain.usecase.event
 
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.CalendarSource
+import com.debanshu.xcalendar.domain.repository.ICalendarSourceRepository
 import com.debanshu.xcalendar.domain.repository.IEventRepository
+import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
+import com.debanshu.xcalendar.domain.model.ReminderPreferences
+import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
+import com.debanshu.xcalendar.domain.usecase.calendarSource.GetCalendarSourceUseCase
+import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
+import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
+import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
 import com.debanshu.xcalendar.domain.util.DomainError
 import com.debanshu.xcalendar.domain.util.DomainResult
 import kotlinx.coroutines.flow.Flow
@@ -52,6 +61,87 @@ class CreateEventUseCaseTest {
         }
     }
 
+    private class FakeCalendarSourceRepository : ICalendarSourceRepository {
+        override fun getSourceForCalendar(calendarId: String) = flowOf<CalendarSource?>(null)
+
+        override suspend fun getSourcesForAccount(accountId: String): List<CalendarSource> = emptyList()
+
+        override suspend fun getAllSources(): List<CalendarSource> = emptyList()
+
+        override suspend fun upsertSources(sources: List<CalendarSource>) = Unit
+
+        override suspend fun deleteSourcesForAccount(accountId: String) = Unit
+
+        override suspend fun deleteSourceForCalendar(calendarId: String) = Unit
+    }
+
+    private class FakeCalendarSyncManager : CalendarSyncManager {
+        override suspend fun listCalendars(accountId: String) = emptyList<com.debanshu.xcalendar.domain.model.ExternalCalendar>()
+
+        override suspend fun listEvents(
+            accountId: String,
+            calendarId: String,
+            timeMin: Long,
+            timeMax: Long,
+        ) = emptyList<com.debanshu.xcalendar.domain.model.ExternalEvent>()
+
+        override suspend fun createEvent(
+            accountId: String,
+            calendarId: String,
+            event: com.debanshu.xcalendar.domain.model.ExternalEvent,
+        ) = null
+
+        override suspend fun updateEvent(
+            accountId: String,
+            calendarId: String,
+            eventId: String,
+            event: com.debanshu.xcalendar.domain.model.ExternalEvent,
+        ) = null
+
+        override suspend fun deleteEvent(
+            accountId: String,
+            calendarId: String,
+            eventId: String,
+        ) = false
+    }
+
+    private class FakeReminderPreferencesRepository : IReminderPreferencesRepository {
+        override val preferences = flowOf(ReminderPreferences())
+
+        override suspend fun setRemindersEnabled(enabled: Boolean) = Unit
+        override suspend fun setPrepMinutes(minutes: Int) = Unit
+        override suspend fun setTravelBufferMinutes(minutes: Int) = Unit
+        override suspend fun setAllDayTime(hour: Int, minute: Int) = Unit
+        override suspend fun setSummaryEnabled(enabled: Boolean) = Unit
+        override suspend fun setSummaryTimes(
+            morningHour: Int,
+            morningMinute: Int,
+            middayHour: Int,
+            middayMinute: Int,
+        ) = Unit
+    }
+
+    private class FakeReminderScheduler : ReminderScheduler {
+        override suspend fun scheduleEvent(event: Event, preferences: ReminderPreferences) = Unit
+        override suspend fun cancelEvent(eventId: String) = Unit
+        override suspend fun scheduleTask(task: com.debanshu.xcalendar.domain.model.Task, preferences: ReminderPreferences) = Unit
+        override suspend fun cancelTask(taskId: String) = Unit
+        override suspend fun scheduleSummaries(preferences: ReminderPreferences) = Unit
+        override suspend fun cancelSummaries() = Unit
+    }
+
+    private class FakeWidgetUpdater : WidgetUpdater {
+        override suspend fun refreshTodayWidget() = Unit
+    }
+
+    private val calendarSourceRepository = FakeCalendarSourceRepository()
+    private val getCalendarSourceUseCase = GetCalendarSourceUseCase(calendarSourceRepository)
+    private val calendarSyncManager = FakeCalendarSyncManager()
+    private val reminderPreferencesRepository = FakeReminderPreferencesRepository()
+    private val getReminderPreferencesUseCase = GetReminderPreferencesUseCase(reminderPreferencesRepository)
+    private val reminderScheduler = FakeReminderScheduler()
+    private val widgetUpdater = FakeWidgetUpdater()
+
     private fun createTestEvent(
         id: String = "test-id-123",
         title: String = "Test Event",
@@ -81,7 +171,15 @@ class CreateEventUseCaseTest {
     fun `CreateEventUseCase adds valid event to repository`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val useCase = CreateEventUseCase(fakeRepository)
+        val useCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val testEvent = createTestEvent()
         
         // When
@@ -97,7 +195,15 @@ class CreateEventUseCaseTest {
     fun `CreateEventUseCase returns error for blank title`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val useCase = CreateEventUseCase(fakeRepository)
+        val useCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val invalidEvent = createTestEvent(title = "   ")
         
         // When
@@ -113,7 +219,15 @@ class CreateEventUseCaseTest {
     fun `CreateEventUseCase returns error for empty title`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val useCase = CreateEventUseCase(fakeRepository)
+        val useCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val invalidEvent = createTestEvent(title = "")
         
         // When
@@ -128,7 +242,15 @@ class CreateEventUseCaseTest {
     fun `CreateEventUseCase returns error when end time before start time`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val useCase = CreateEventUseCase(fakeRepository)
+        val useCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val invalidEvent = createTestEvent(
             startTime = 1704070800000L,  // Later time
             endTime = 1704067200000L     // Earlier time
@@ -146,7 +268,15 @@ class CreateEventUseCaseTest {
     fun `CreateEventUseCase returns error for blank calendar ID`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val useCase = CreateEventUseCase(fakeRepository)
+        val useCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val invalidEvent = createTestEvent(calendarId = "")
         
         // When
@@ -161,7 +291,15 @@ class CreateEventUseCaseTest {
     fun `CreateEventUseCase allows all-day event with same start and end`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val useCase = CreateEventUseCase(fakeRepository)
+        val useCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val allDayEvent = createTestEvent(
             startTime = 1704067200000L,
             endTime = 1704067200000L,
@@ -182,8 +320,24 @@ class CreateEventUseCaseTest {
     fun `UpdateEventUseCase updates valid event in repository`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val createUseCase = CreateEventUseCase(fakeRepository)
-        val updateUseCase = UpdateEventUseCase(fakeRepository)
+        val createUseCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
+        val updateUseCase =
+            UpdateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         
         val originalEvent = createTestEvent(id = "event-1", title = "Original Title")
         createUseCase(originalEvent)
@@ -203,7 +357,15 @@ class CreateEventUseCaseTest {
     fun `UpdateEventUseCase returns error for blank event ID`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val updateUseCase = UpdateEventUseCase(fakeRepository)
+        val updateUseCase =
+            UpdateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val invalidEvent = createTestEvent(id = "")
         
         // When
@@ -218,7 +380,15 @@ class CreateEventUseCaseTest {
     fun `UpdateEventUseCase returns error for invalid event data`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val updateUseCase = UpdateEventUseCase(fakeRepository)
+        val updateUseCase =
+            UpdateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val invalidEvent = createTestEvent(title = "")
         
         // When
@@ -235,8 +405,23 @@ class CreateEventUseCaseTest {
     fun `DeleteEventUseCase removes event from repository`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val createUseCase = CreateEventUseCase(fakeRepository)
-        val deleteUseCase = DeleteEventUseCase(fakeRepository)
+        val createUseCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
+        val deleteUseCase =
+            DeleteEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                reminderScheduler,
+                widgetUpdater,
+            )
         
         val testEvent = createTestEvent()
         createUseCase(testEvent)
@@ -257,7 +442,15 @@ class CreateEventUseCaseTest {
     fun `GetEventsForDateRangeUseCase returns events from repository`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
-        val createUseCase = CreateEventUseCase(fakeRepository)
+        val createUseCase =
+            CreateEventUseCase(
+                fakeRepository,
+                getCalendarSourceUseCase,
+                calendarSyncManager,
+                getReminderPreferencesUseCase,
+                reminderScheduler,
+                widgetUpdater,
+            )
         val getEventsUseCase = GetEventsForDateRangeUseCase(fakeRepository)
         
         val testEvent = createTestEvent()

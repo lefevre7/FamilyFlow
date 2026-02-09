@@ -17,6 +17,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -90,7 +91,8 @@ fun AddEventDialog(
         )
     }
     var showLocationField by remember { mutableStateOf(false) }
-    var reminderMinutes by remember { mutableStateOf(10) }
+    var reminderMinutes by remember { mutableStateOf(20) }
+    var showReminderPicker by remember { mutableStateOf(false) }
 
     ModalBottomSheet(
         onDismissRequest = { onDismiss() },
@@ -183,6 +185,7 @@ fun AddEventDialog(
             NotificationRow(
                 reminderMinutes = reminderMinutes,
                 onReminderChange = { reminderMinutes = it },
+                onClick = { showReminderPicker = true },
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 1.dp)
@@ -193,6 +196,36 @@ fun AddEventDialog(
                 text = "Add description",
                 onClick = { /* Handle add description */ },
             )
+        }
+    }
+
+    if (showReminderPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showReminderPicker = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                Text(
+                    text = "Reminder",
+                    style = XCalendarTheme.typography.titleMedium,
+                )
+                listOf(0, 10, 20, 30, 60).forEach { minutes ->
+                    TextButton(
+                        onClick = {
+                            reminderMinutes = minutes
+                            showReminderPicker = false
+                        },
+                    ) {
+                        Text(
+                            text = if (minutes == 0) "No reminder" else "$minutes minutes before",
+                            color = if (minutes == reminderMinutes) XCalendarTheme.colorScheme.primary else XCalendarTheme.colorScheme.onSurface,
+                        )
+                    }
+                }
+            }
         }
     }
 }
@@ -298,4 +331,3 @@ private fun createEvent(
         color = selectedCalendar?.color ?: convertStringToColor("defaultColor", 255),
     )
 }
-

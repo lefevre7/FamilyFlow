@@ -266,7 +266,7 @@ class FakeUserRepository(
             id = "api_user",
             name = "API User",
             email = "api@example.com",
-            imageUrl = null
+            photoUrl = ""
         )
         addUser(dummyUser)
     }
@@ -294,4 +294,3 @@ class FakeUserRepository(
         _users.value = users.toMutableList()
     }
 }
-

@@ -9,12 +9,11 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.debanshu.xcalendar.domain.model.Event
-import com.debanshu.xcalendar.domain.model.Holiday
-import com.debanshu.xcalendar.ui.screen.dayScreen.DayScreen
-import com.debanshu.xcalendar.ui.screen.monthScreen.MonthScreen
-import com.debanshu.xcalendar.ui.screen.scheduleScreen.ScheduleScreen
-import com.debanshu.xcalendar.ui.screen.threeDayScreen.ThreeDayScreen
-import com.debanshu.xcalendar.ui.screen.weekScreen.WeekScreen
+import com.debanshu.xcalendar.ui.screen.peopleScreen.PeopleScreen
+import com.debanshu.xcalendar.ui.screen.planScreen.PlanScreen
+import com.debanshu.xcalendar.ui.screen.settingsScreen.SettingsScreen
+import com.debanshu.xcalendar.ui.screen.todayScreen.TodayScreen
+import com.debanshu.xcalendar.ui.screen.weekRealityScreen.WeekRealityScreen
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import kotlinx.collections.immutable.ImmutableList
 
@@ -24,8 +23,6 @@ fun NavigationHost(
     backStack: NavBackStack<NavKey>,
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
-    holidays: ImmutableList<Holiday>,
-    onEventClick: (Event) -> Unit,
 ) {
     // Track current screen for shared element visibility
     val currentScreen = backStack.lastOrNull()
@@ -41,57 +38,35 @@ fun NavigationHost(
             ),
         entryProvider =
             entryProvider {
-                entry(NavigableScreen.Month) {
-                    MonthScreen(
+                entry(NavigableScreen.Today) {
+                    TodayScreen(
                         dateStateHolder = dateStateHolder,
                         events = events,
-                        holidays = holidays,
-                        isVisible = currentScreen == NavigableScreen.Month,
-                        onDateClick = {
-                            backStack.add(NavigableScreen.Day)
-                        },
+                        isVisible = currentScreen == NavigableScreen.Today,
                     )
                 }
                 entry(NavigableScreen.Week) {
-                    WeekScreen(
+                    WeekRealityScreen(
                         dateStateHolder = dateStateHolder,
                         events = events,
-                        holidays = holidays,
                         isVisible = currentScreen == NavigableScreen.Week,
-                        onEventClick = onEventClick,
-                        onDateClickCallback = {
-                            backStack.add(NavigableScreen.Day)
-                        },
                     )
                 }
-                entry(NavigableScreen.Day) {
-                    DayScreen(
+                entry(NavigableScreen.Plan) {
+                    PlanScreen(
                         dateStateHolder = dateStateHolder,
                         events = events,
-                        holidays = holidays,
-                        isVisible = currentScreen == NavigableScreen.Day,
-                        onEventClick = onEventClick,
+                        isVisible = currentScreen == NavigableScreen.Plan,
                     )
                 }
-                entry(NavigableScreen.ThreeDay) {
-                    ThreeDayScreen(
-                        dateStateHolder = dateStateHolder,
-                        events = events,
-                        holidays = holidays,
-                        isVisible = currentScreen == NavigableScreen.ThreeDay,
-                        onEventClick = onEventClick,
-                        onDateClickCallback = {
-                            backStack.add(NavigableScreen.Day)
-                        },
+                entry(NavigableScreen.People) {
+                    PeopleScreen(
+                        isVisible = currentScreen == NavigableScreen.People,
                     )
                 }
-                entry(NavigableScreen.Schedule) {
-                    ScheduleScreen(
-                        dateStateHolder = dateStateHolder,
-                        events = events,
-                        holidays = holidays,
-                        isVisible = currentScreen == NavigableScreen.Schedule,
-                        onEventClick = onEventClick,
+                entry(NavigableScreen.Settings) {
+                    SettingsScreen(
+                        isVisible = currentScreen == NavigableScreen.Settings,
                     )
                 }
             },

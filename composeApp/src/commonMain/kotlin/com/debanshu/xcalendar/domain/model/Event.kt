@@ -19,4 +19,13 @@ data class Event(
     val recurringRule: String? = null,
     val reminderMinutes: List<Int> = emptyList(),
     val color: Int,
+    val source: EventSource = EventSource.LOCAL,
+    val externalId: String? = null,
+    val externalUpdatedAt: Long? = null,
+    val lastSyncedAt: Long? = null,
 )
+
+enum class EventSource {
+    LOCAL,
+    GOOGLE,
+}

@@ -143,6 +143,19 @@ fun convertStringToColor(
         (b and 0xFF)
 }
 
+fun parseHexColor(hex: String?, fallback: Int): Int {
+    if (hex.isNullOrBlank()) return fallback
+    val cleaned = hex.trim().removePrefix("#")
+    return runCatching {
+        val value = cleaned.toLong(16)
+        when (cleaned.length) {
+            6 -> (0xFF000000 or value).toInt()
+            8 -> value.toInt()
+            else -> fallback
+        }
+    }.getOrDefault(fallback)
+}
+
 inline fun Modifier.applyIf(
     condition: Boolean,
     modifier: Modifier.() -> Modifier,

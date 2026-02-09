@@ -5,6 +5,7 @@ import com.debanshu.xcalendar.data.localDataSource.model.EventEntity
 import com.debanshu.xcalendar.data.localDataSource.model.EventWithReminders
 import com.debanshu.xcalendar.data.remoteDataSource.model.calendar.EventResponseItem
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.EventSource
 
 
 fun EventResponseItem.asEvent(): Event {
@@ -21,7 +22,8 @@ fun EventResponseItem.asEvent(): Event {
         reminderMinutes = reminderMinutes,
         calendarId = calendarId,
         calendarName = calendarName ?: "",
-        color = convertStringToColor(calendarId + calendarName)
+        color = convertStringToColor(calendarId + calendarName),
+        source = EventSource.LOCAL,
     )
 }
 
@@ -39,7 +41,11 @@ fun EventWithReminders.asEvent(): Event {
         recurringRule = event.recurringRule,
         reminderMinutes = reminders.map { it.minutes },
         calendarName = event.calendarName,
-        color = convertStringToColor(event.calendarId + event.calendarName)
+        color = convertStringToColor(event.calendarId + event.calendarName),
+        source = EventSource.valueOf(event.source),
+        externalId = event.externalId,
+        externalUpdatedAt = event.externalUpdatedAt,
+        lastSyncedAt = event.lastSyncedAt,
     )
 }
 
@@ -57,7 +63,11 @@ fun EventEntity.asEvent(): Event {
         recurringRule = recurringRule,
         reminderMinutes = emptyList(),
         calendarName = calendarName,
-        color = convertStringToColor(calendarId + calendarName)
+        color = convertStringToColor(calendarId + calendarName),
+        source = EventSource.valueOf(source),
+        externalId = externalId,
+        externalUpdatedAt = externalUpdatedAt,
+        lastSyncedAt = lastSyncedAt,
     )
 }
 
@@ -74,4 +84,8 @@ fun Event.asEntity(): EventEntity =
         isRecurring = isRecurring,
         calendarName = calendarName,
         recurringRule = recurringRule,
+        source = source.name,
+        externalId = externalId,
+        externalUpdatedAt = externalUpdatedAt,
+        lastSyncedAt = lastSyncedAt,
     )

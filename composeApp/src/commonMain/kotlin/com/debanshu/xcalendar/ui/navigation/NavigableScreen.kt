@@ -5,17 +5,17 @@ import kotlinx.serialization.Serializable
 
 sealed interface NavigableScreen : NavKey {
     @Serializable
-    data object Schedule : NavigableScreen
-
-    @Serializable
-    data object Day : NavigableScreen
-
-    @Serializable
-    data object ThreeDay : NavigableScreen
+    data object Today : NavigableScreen
 
     @Serializable
     data object Week : NavigableScreen
 
     @Serializable
-    data object Month : NavigableScreen
+    data object Plan : NavigableScreen
+
+    @Serializable
+    data object People : NavigableScreen
+
+    @Serializable
+    data object Settings : NavigableScreen
 }

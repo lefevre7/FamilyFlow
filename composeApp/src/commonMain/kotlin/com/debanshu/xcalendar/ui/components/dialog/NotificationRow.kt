@@ -26,6 +26,7 @@ import xcalendar.composeapp.generated.resources.ic_unfold_more
 internal fun NotificationRow(
     reminderMinutes: Int,
     onReminderChange: (Int) -> Unit = {},
+    onClick: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     Row(
@@ -33,7 +34,7 @@ internal fun NotificationRow(
         modifier =
             modifier
                 .fillMaxWidth()
-                .clickable { /* Open reminder picker */ }
+                .clickable { onClick() }
                 .padding(horizontal = 16.dp, vertical = 4.dp),
     ) {
         Icon(

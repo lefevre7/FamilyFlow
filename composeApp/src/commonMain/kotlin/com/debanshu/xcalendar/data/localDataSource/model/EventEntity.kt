@@ -32,4 +32,8 @@ data class EventEntity(
     val isAllDay: Boolean,
     val isRecurring: Boolean,
     val recurringRule: String? = null,
+    val source: String = "LOCAL",
+    val externalId: String? = null,
+    val externalUpdatedAt: Long? = null,
+    val lastSyncedAt: Long? = null,
 )

@@ -8,6 +8,7 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -69,10 +70,10 @@ import org.jetbrains.compose.resources.painterResource
 import xcalendar.composeapp.generated.resources.Res
 import xcalendar.composeapp.generated.resources.ic_add
 import xcalendar.composeapp.generated.resources.ic_calendar_view_day
-import xcalendar.composeapp.generated.resources.ic_calendar_view_month
 import xcalendar.composeapp.generated.resources.ic_calendar_view_schedule
-import xcalendar.composeapp.generated.resources.ic_calendar_view_three_day
 import xcalendar.composeapp.generated.resources.ic_calendar_view_week
+import xcalendar.composeapp.generated.resources.ic_description
+import xcalendar.composeapp.generated.resources.ic_notifications
 import kotlin.math.abs
 
 // Fluid dynamics constants
@@ -301,6 +302,7 @@ internal fun CalendarBottomNavigationBar(
     selectedView: NavigableScreen,
     onViewSelect: (NavigableScreen) -> Unit,
     onAddClick: () -> Unit,
+    onAddLongPress: () -> Unit = {},
 ) {
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val coroutineScope = rememberCoroutineScope()
@@ -310,11 +312,11 @@ internal fun CalendarBottomNavigationBar(
     val navItems =
         remember {
             listOf(
-                NavItem(NavigableScreen.Schedule, Res.drawable.ic_calendar_view_schedule, "Schedule"),
-                NavItem(NavigableScreen.Day, Res.drawable.ic_calendar_view_day, "Day"),
-                NavItem(NavigableScreen.ThreeDay, Res.drawable.ic_calendar_view_three_day, "3 Day"),
+                NavItem(NavigableScreen.Today, Res.drawable.ic_calendar_view_day, "Today"),
                 NavItem(NavigableScreen.Week, Res.drawable.ic_calendar_view_week, "Week"),
-                NavItem(NavigableScreen.Month, Res.drawable.ic_calendar_view_month, "Month"),
+                NavItem(NavigableScreen.Plan, Res.drawable.ic_description, "Plan"),
+                NavItem(NavigableScreen.People, Res.drawable.ic_calendar_view_schedule, "People"),
+                NavItem(NavigableScreen.Settings, Res.drawable.ic_notifications, "Settings"),
             )
         }
 
@@ -401,8 +403,7 @@ internal fun CalendarBottomNavigationBar(
                             .fillMaxSize()
                             .clip(RoundedCornerShape(30.dp))
                             .background(XCalendarTheme.colorScheme.surfaceContainer)
-                            .padding(3.dp)
-                            .indicatorDragGesture(state, selectedIndex, navItems, coroutineScope, currentOnViewSelect),
+                            .padding(3.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
@@ -438,16 +439,24 @@ internal fun CalendarBottomNavigationBar(
 
             Spacer(modifier = Modifier.width(12.dp))
 
-            FloatingActionButton(
-                onClick = onAddClick,
-                shape = CircleShape,
-                containerColor = XCalendarTheme.colorScheme.primary,
-                contentColor = XCalendarTheme.colorScheme.onPrimary,
+            Box(
+                modifier =
+                    Modifier.combinedClickable(
+                        onClick = onAddClick,
+                        onLongClick = onAddLongPress,
+                    ),
             ) {
-                Icon(
-                    painter = painterResource(Res.drawable.ic_add),
-                    contentDescription = "Add Event",
-                )
+                FloatingActionButton(
+                    onClick = {},
+                    shape = CircleShape,
+                    containerColor = XCalendarTheme.colorScheme.primary,
+                    contentColor = XCalendarTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        painter = painterResource(Res.drawable.ic_add),
+                        contentDescription = "Add Event",
+                    )
+                }
             }
         }
     }

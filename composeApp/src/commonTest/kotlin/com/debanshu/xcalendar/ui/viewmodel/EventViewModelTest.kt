@@ -1,7 +1,16 @@
 package com.debanshu.xcalendar.ui.viewmodel
 
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.ReminderPreferences
+import com.debanshu.xcalendar.domain.model.CalendarSource
+import com.debanshu.xcalendar.domain.repository.ICalendarSourceRepository
 import com.debanshu.xcalendar.domain.repository.IEventRepository
+import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
+import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
+import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
+import com.debanshu.xcalendar.domain.usecase.calendarSource.GetCalendarSourceUseCase
+import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
+import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
 import com.debanshu.xcalendar.domain.usecase.event.CreateEventUseCase
 import com.debanshu.xcalendar.domain.usecase.event.DeleteEventUseCase
 import com.debanshu.xcalendar.domain.usecase.event.UpdateEventUseCase
@@ -64,6 +73,87 @@ class EventViewModelTest {
         }
     }
 
+    private class FakeCalendarSourceRepository : ICalendarSourceRepository {
+        override fun getSourceForCalendar(calendarId: String) = flowOf<CalendarSource?>(null)
+
+        override suspend fun getSourcesForAccount(accountId: String): List<CalendarSource> = emptyList()
+
+        override suspend fun getAllSources(): List<CalendarSource> = emptyList()
+
+        override suspend fun upsertSources(sources: List<CalendarSource>) = Unit
+
+        override suspend fun deleteSourcesForAccount(accountId: String) = Unit
+
+        override suspend fun deleteSourceForCalendar(calendarId: String) = Unit
+    }
+
+    private class FakeCalendarSyncManager : CalendarSyncManager {
+        override suspend fun listCalendars(accountId: String) = emptyList<com.debanshu.xcalendar.domain.model.ExternalCalendar>()
+
+        override suspend fun listEvents(
+            accountId: String,
+            calendarId: String,
+            timeMin: Long,
+            timeMax: Long,
+        ) = emptyList<com.debanshu.xcalendar.domain.model.ExternalEvent>()
+
+        override suspend fun createEvent(
+            accountId: String,
+            calendarId: String,
+            event: com.debanshu.xcalendar.domain.model.ExternalEvent,
+        ) = null
+
+        override suspend fun updateEvent(
+            accountId: String,
+            calendarId: String,
+            eventId: String,
+            event: com.debanshu.xcalendar.domain.model.ExternalEvent,
+        ) = null
+
+        override suspend fun deleteEvent(
+            accountId: String,
+            calendarId: String,
+            eventId: String,
+        ) = false
+    }
+
+    private class FakeReminderPreferencesRepository : IReminderPreferencesRepository {
+        override val preferences = flowOf(ReminderPreferences())
+
+        override suspend fun setRemindersEnabled(enabled: Boolean) = Unit
+        override suspend fun setPrepMinutes(minutes: Int) = Unit
+        override suspend fun setTravelBufferMinutes(minutes: Int) = Unit
+        override suspend fun setAllDayTime(hour: Int, minute: Int) = Unit
+        override suspend fun setSummaryEnabled(enabled: Boolean) = Unit
+        override suspend fun setSummaryTimes(
+            morningHour: Int,
+            morningMinute: Int,
+            middayHour: Int,
+            middayMinute: Int,
+        ) = Unit
+    }
+
+    private class FakeReminderScheduler : ReminderScheduler {
+        override suspend fun scheduleEvent(event: Event, preferences: ReminderPreferences) = Unit
+        override suspend fun cancelEvent(eventId: String) = Unit
+        override suspend fun scheduleTask(task: com.debanshu.xcalendar.domain.model.Task, preferences: ReminderPreferences) = Unit
+        override suspend fun cancelTask(taskId: String) = Unit
+        override suspend fun scheduleSummaries(preferences: ReminderPreferences) = Unit
+        override suspend fun cancelSummaries() = Unit
+    }
+
+    private class FakeWidgetUpdater : WidgetUpdater {
+        override suspend fun refreshTodayWidget() = Unit
+    }
+
+    private val calendarSourceRepository = FakeCalendarSourceRepository()
+    private val getCalendarSourceUseCase = GetCalendarSourceUseCase(calendarSourceRepository)
+    private val calendarSyncManager = FakeCalendarSyncManager()
+    private val reminderPreferencesRepository = FakeReminderPreferencesRepository()
+    private val getReminderPreferencesUseCase = GetReminderPreferencesUseCase(reminderPreferencesRepository)
+    private val reminderScheduler = FakeReminderScheduler()
+    private val widgetUpdater = FakeWidgetUpdater()
+
     private fun createTestEvent(
         id: String = "test-id-123",
         title: String = "Test Event"
@@ -85,9 +175,32 @@ class EventViewModelTest {
 
     private fun createViewModel(fakeRepository: FakeEventRepository = FakeEventRepository()): EventViewModel {
         return EventViewModel(
-            createEventUseCase = CreateEventUseCase(fakeRepository),
-            updateEventUseCase = UpdateEventUseCase(fakeRepository),
-            deleteEventUseCase = DeleteEventUseCase(fakeRepository)
+            createEventUseCase =
+                CreateEventUseCase(
+                    fakeRepository,
+                    getCalendarSourceUseCase,
+                    calendarSyncManager,
+                    getReminderPreferencesUseCase,
+                    reminderScheduler,
+                    widgetUpdater,
+                ),
+            updateEventUseCase =
+                UpdateEventUseCase(
+                    fakeRepository,
+                    getCalendarSourceUseCase,
+                    calendarSyncManager,
+                    getReminderPreferencesUseCase,
+                    reminderScheduler,
+                    widgetUpdater,
+                ),
+            deleteEventUseCase =
+                DeleteEventUseCase(
+                    fakeRepository,
+                    getCalendarSourceUseCase,
+                    calendarSyncManager,
+                    reminderScheduler,
+                    widgetUpdater,
+                )
         )
     }
 

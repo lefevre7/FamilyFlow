@@ -12,6 +12,7 @@ import com.debanshu.xcalendar.domain.usecase.calendar.GetUserCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.event.GetEventsForDateRangeUseCase
 import com.debanshu.xcalendar.domain.usecase.holiday.GetHolidaysForYearUseCase
 import com.debanshu.xcalendar.domain.usecase.holiday.RefreshHolidaysUseCase
+import com.debanshu.xcalendar.domain.usecase.person.EnsureDefaultPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.domain.util.DomainError
 import com.debanshu.xcalendar.ui.state.DateStateHolder
@@ -47,6 +48,7 @@ class CalendarViewModel(
     getEventsForDateRangeUseCase: GetEventsForDateRangeUseCase,
     private val getHolidaysForYearUseCase: GetHolidaysForYearUseCase,
     private val refreshHolidaysUseCase: RefreshHolidaysUseCase,
+    private val ensureDefaultPeopleUseCase: EnsureDefaultPeopleUseCase,
     getCurrentUserUseCase: GetCurrentUserUseCase,
 ) : ViewModel() {
     private val userId = getCurrentUserUseCase()
@@ -173,6 +175,7 @@ class CalendarViewModel(
     private suspend fun initializeUsers() {
         runCatching {
             userRepository.getUserFromApi()
+            ensureDefaultPeopleUseCase()
         }.onFailure { exception ->
             handleError("Failed to initialize users", exception)
         }

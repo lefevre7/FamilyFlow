@@ -2,6 +2,7 @@ package com.debanshu.xcalendar.ui.screen.monthScreen.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -78,6 +79,7 @@ fun MonthView(
     val gridState = rememberLazyGridState()
 
     BoxWithConstraints(
+        modifier = modifier,
         propagateMinConstraints = true,
     ) {
         // Cache item size to avoid recalculation
@@ -90,7 +92,10 @@ fun MonthView(
             }
 
         LazyVerticalGrid(
-            modifier = modifier.background(color = XCalendarTheme.colorScheme.surfaceContainerLow),
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(color = XCalendarTheme.colorScheme.surfaceContainerLow),
             state = gridState,
             columns = GridCells.Fixed(7),
             userScrollEnabled = false,

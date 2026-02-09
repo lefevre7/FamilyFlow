@@ -19,7 +19,7 @@ plugins {
 kotlin {
     androidTarget {
         compilerOptions {
-            jvmTarget.set(JvmTarget.JVM_23)
+            jvmTarget.set(JvmTarget.JVM_21)
         }
     }
     compilerOptions {
@@ -58,6 +58,23 @@ kotlin {
             implementation(libs.androidx.activity.compose)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.koin.android)
+            implementation(libs.tesseract4android)
+            implementation(libs.litertlm)
+            implementation(libs.appauth)
+            implementation(libs.security.crypto)
+            implementation(libs.datastore.preferences)
+            implementation(libs.glance.appwidget)
+            implementation(libs.glance.material3)
+            implementation(libs.work.runtime)
+        }
+        val androidUnitTest by getting {
+            dependencies {
+                implementation(kotlin("test"))
+                implementation(libs.robolectric)
+                implementation(libs.androidx.test.core)
+                implementation(libs.work.testing)
+                implementation(libs.androidx.compose.ui.test.junit4)
+            }
         }
         commonMain.dependencies {
             implementation(libs.jetbrains.material3)
@@ -161,6 +178,7 @@ android {
 
     defaultConfig {
         applicationId = "com.debanshu.xcalendar"
+        manifestPlaceholders["appAuthRedirectScheme"] = "com.debanshu.xcalendar"
         minSdk =
             libs.versions.android.minSdk
                 .get()
@@ -182,9 +200,12 @@ android {
             isMinifyEnabled = false
         }
     }
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_23
-        targetCompatibility = JavaVersion.VERSION_23
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
 }
 
@@ -204,6 +225,11 @@ buildkonfig {
             FieldSpec.Type.STRING,
             "API_KEY",
             localProperties["API_KEY"]?.toString() ?: "",
+        )
+        buildConfigField(
+            FieldSpec.Type.STRING,
+            "CLIENT_ID",
+            localProperties["ClientId"]?.toString() ?: "",
         )
     }
 }
