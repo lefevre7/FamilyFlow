@@ -23,6 +23,7 @@ data class Event(
     val externalId: String? = null,
     val externalUpdatedAt: Long? = null,
     val lastSyncedAt: Long? = null,
+    val affectedPersonIds: List<String> = emptyList(),
 )
 
 enum class EventSource {

@@ -3,6 +3,7 @@ package com.debanshu.xcalendar.domain.repository
 import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
@@ -31,6 +32,9 @@ class ReminderPreferencesRepository : IReminderPreferencesRepository {
                 summaryMorningMinute = prefs[SUMMARY_MORNING_MINUTE] ?: 0,
                 summaryMiddayHour = prefs[SUMMARY_MIDDAY_HOUR] ?: 13,
                 summaryMiddayMinute = prefs[SUMMARY_MIDDAY_MINUTE] ?: 0,
+                reducedMotionEnabled = prefs[REDUCED_MOTION_ENABLED] ?: true,
+                highContrastEnabled = prefs[HIGH_CONTRAST_ENABLED] ?: false,
+                textScale = prefs[TEXT_SCALE] ?: 1.0f,
             )
         }
 
@@ -71,6 +75,18 @@ class ReminderPreferencesRepository : IReminderPreferencesRepository {
         }
     }
 
+    override suspend fun setReducedMotionEnabled(enabled: Boolean) {
+        dataStore.edit { it[REDUCED_MOTION_ENABLED] = enabled }
+    }
+
+    override suspend fun setHighContrastEnabled(enabled: Boolean) {
+        dataStore.edit { it[HIGH_CONTRAST_ENABLED] = enabled }
+    }
+
+    override suspend fun setTextScale(scale: Float) {
+        dataStore.edit { it[TEXT_SCALE] = scale.coerceIn(0.9f, 1.3f) }
+    }
+
     private companion object {
         val REMINDERS_ENABLED = booleanPreferencesKey("reminders_enabled")
         val PREP_MINUTES = intPreferencesKey("prep_minutes")
@@ -82,5 +98,8 @@ class ReminderPreferencesRepository : IReminderPreferencesRepository {
         val SUMMARY_MORNING_MINUTE = intPreferencesKey("summary_morning_minute")
         val SUMMARY_MIDDAY_HOUR = intPreferencesKey("summary_midday_hour")
         val SUMMARY_MIDDAY_MINUTE = intPreferencesKey("summary_midday_minute")
+        val REDUCED_MOTION_ENABLED = booleanPreferencesKey("reduced_motion_enabled")
+        val HIGH_CONTRAST_ENABLED = booleanPreferencesKey("high_contrast_enabled")
+        val TEXT_SCALE = floatPreferencesKey("text_scale")
     }
 }

@@ -11,4 +11,7 @@ data class ReminderPreferences(
     val summaryMorningMinute: Int = 0,
     val summaryMiddayHour: Int = 13,
     val summaryMiddayMinute: Int = 0,
+    val reducedMotionEnabled: Boolean = true,
+    val highContrastEnabled: Boolean = false,
+    val textScale: Float = 1.0f,
 )

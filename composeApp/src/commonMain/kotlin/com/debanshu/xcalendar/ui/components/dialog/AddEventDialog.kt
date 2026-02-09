@@ -4,6 +4,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -11,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -22,6 +25,8 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,13 +39,17 @@ import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.common.convertStringToColor
 import com.debanshu.xcalendar.domain.model.Calendar
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.Person
+import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.User
+import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import kotlinx.collections.immutable.ImmutableList
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import org.koin.compose.koinInject
 import xcalendar.composeapp.generated.resources.Res
 import xcalendar.composeapp.generated.resources.ic_description
 import xcalendar.composeapp.generated.resources.ic_location
@@ -63,6 +72,9 @@ fun AddEventDialog(
     var description by remember { mutableStateOf("") }
     var location by remember { mutableStateOf("") }
     var selectedCalendarId by remember { mutableStateOf(calendars.firstOrNull()?.id ?: "") }
+    val getPeopleUseCase = koinInject<GetPeopleUseCase>()
+    val people by remember { getPeopleUseCase() }.collectAsState(initial = emptyList())
+    var selectedPersonIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var isAllDay by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     var selectedEventType by remember { mutableStateOf(EventType.EVENT) }
@@ -73,7 +85,7 @@ fun AddEventDialog(
             LocalDateTime(
                 selectedDate.year,
                 selectedDate.month,
-                selectedDate.dayOfMonth,
+                selectedDate.day,
                 12,
                 0,
             )
@@ -84,7 +96,7 @@ fun AddEventDialog(
             LocalDateTime(
                 selectedDate.year,
                 selectedDate.month,
-                selectedDate.dayOfMonth,
+                selectedDate.day,
                 12,
                 30,
             )
@@ -93,6 +105,15 @@ fun AddEventDialog(
     var showLocationField by remember { mutableStateOf(false) }
     var reminderMinutes by remember { mutableStateOf(20) }
     var showReminderPicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(people) {
+        if (selectedPersonIds.isNotEmpty() || people.isEmpty()) return@LaunchedEffect
+        val defaultPersonId =
+            people.firstOrNull { it.role == PersonRole.MOM }?.id ?: people.firstOrNull()?.id
+        if (defaultPersonId != null) {
+            selectedPersonIds = setOf(defaultPersonId)
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = { onDismiss() },
@@ -119,6 +140,7 @@ fun AddEventDialog(
                             selectedCalendar = selectedCalendar,
                             selectedCalendarId = selectedCalendarId,
                             reminderMinutes = reminderMinutes,
+                            affectedPersonIds = selectedPersonIds.toList(),
                         )
                         onSave(event)
                     }
@@ -157,6 +179,21 @@ fun AddEventDialog(
                 calendars = calendars,
                 selectedCalendarId = selectedCalendarId,
                 onCalendarSelected = { selectedCalendarId = it },
+            )
+
+            HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 1.dp)
+
+            WhoAffectedSection(
+                people = people,
+                selectedPersonIds = selectedPersonIds,
+                onTogglePerson = { personId ->
+                    selectedPersonIds =
+                        if (selectedPersonIds.contains(personId)) {
+                            selectedPersonIds - personId
+                        } else {
+                            selectedPersonIds + personId
+                        }
+                },
             )
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 16.dp), thickness = 1.dp)
@@ -298,6 +335,7 @@ private fun createEvent(
     selectedCalendar: Calendar?,
     selectedCalendarId: String,
     reminderMinutes: Int,
+    affectedPersonIds: List<String>,
 ): Event {
     return Event(
         id = Uuid.random().toString(),
@@ -310,7 +348,7 @@ private fun createEvent(
             LocalDateTime(
                 selectedDate.year,
                 selectedDate.month,
-                selectedDate.dayOfMonth,
+                selectedDate.day,
                 0, 0,
             ).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
         } else {
@@ -320,7 +358,7 @@ private fun createEvent(
             LocalDateTime(
                 selectedDate.year,
                 selectedDate.month,
-                selectedDate.dayOfMonth,
+                selectedDate.day,
                 23, 59,
             ).toInstant(TimeZone.currentSystemDefault()).toEpochMilliseconds()
         } else {
@@ -329,5 +367,35 @@ private fun createEvent(
         isAllDay = isAllDay,
         reminderMinutes = if (reminderMinutes > 0) listOf(reminderMinutes) else emptyList(),
         color = selectedCalendar?.color ?: convertStringToColor("defaultColor", 255),
+        affectedPersonIds = affectedPersonIds.distinct(),
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WhoAffectedSection(
+    people: List<Person>,
+    selectedPersonIds: Set<String>,
+    onTogglePerson: (String) -> Unit,
+) {
+    if (people.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Who's affected",
+            style = XCalendarTheme.typography.bodyMedium,
+            color = XCalendarTheme.colorScheme.onSurface,
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            people.forEach { person ->
+                FilterChip(
+                    selected = selectedPersonIds.contains(person.id),
+                    onClick = { onTogglePerson(person.id) },
+                    label = { Text(person.name) },
+                )
+            }
+        }
+    }
 }

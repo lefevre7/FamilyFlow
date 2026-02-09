@@ -43,6 +43,9 @@ fun NavigationHost(
                         dateStateHolder = dateStateHolder,
                         events = events,
                         isVisible = currentScreen == NavigableScreen.Today,
+                        onNavigateToSettings = {
+                            backStack.replaceLast(NavigableScreen.Settings)
+                        },
                     )
                 }
                 entry(NavigableScreen.Week) {
@@ -50,6 +53,9 @@ fun NavigationHost(
                         dateStateHolder = dateStateHolder,
                         events = events,
                         isVisible = currentScreen == NavigableScreen.Week,
+                        onNavigateToSettings = {
+                            backStack.replaceLast(NavigableScreen.Settings)
+                        },
                     )
                 }
                 entry(NavigableScreen.Plan) {

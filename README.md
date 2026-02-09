@@ -18,6 +18,12 @@ A family-first mental offloading scheduling app built for a mom with ADHD. The a
 - Gentle reminders, visual timers, and widgets
 - Local-first storage with optional sync
 
+**Current Scope And Non-goals**
+- Google Calendar is the only external calendar provider in this phase (no iCal link import yet).
+- Event people ownership is persisted via a sidecar store (no Room schema migration for event-people mapping).
+- Mom is the only admin/editor in this phase; partner and kids are view-oriented roles.
+- Suggestions are conservative and require explicit accept; there is no silent auto-reschedule.
+
 **Tech Stack**
 - Kotlin Multiplatform + Compose Multiplatform
 - Room, WorkManager, Koin
@@ -29,6 +35,27 @@ A family-first mental offloading scheduling app built for a mom with ADHD. The a
 2. Add `ClientId` in `local.properties` for Google Calendar OAuth. `API_KEY` is optional if needed by integrations.
 3. The Gemma model is bundled in `composeApp/src/androidMain/assets/llm/`. The app can also download the model on demand with a fallback URL to `media.githubusercontent.com`.
 4. Tesseract data is bundled in `composeApp/src/androidMain/assets/tessdata/eng.traineddata`.
+
+**Google OAuth Client Setup (Debug + Release)**
+1. Confirm package/redirect used by the app:
+   - Package: `com.debanshu.xcalendar`
+   - Redirect URI: `com.debanshu.xcalendar:/oauth2redirect`
+2. Get debug SHA fingerprints:
+   - `./gradlew :composeApp:signingReport`
+   - Copy SHA-1/SHA-256 for the `debug` variant.
+3. Create (or update) Android OAuth client in Google Cloud Console for debug:
+   - Type: `Android`
+   - Package name: `com.debanshu.xcalendar`
+   - SHA-1: debug SHA-1 from signing report
+4. For release sign-in, create a release keystore and read release SHA fingerprints:
+   - `keytool -list -v -keystore ~/keystores/adhd-mom-release.jks -alias adhd-mom`
+   - Create a second Android OAuth client in Google Cloud with the same package and release SHA-1.
+5. Put the active Android client ID in `local.properties`:
+   - `ClientId=YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com`
+6. Rebuild after changing `ClientId`:
+   - `./gradlew :composeApp:assembleDebug`
+
+Note: this project currently uses a single `ClientId` value from `local.properties`. Use the debug client ID for debug builds and switch to the release client ID when validating signed release OAuth.
 
 **Install And Run (Android)**
 1. Start an emulator from Android Studio Device Manager, or connect a physical Android device with USB debugging enabled.
@@ -43,6 +70,10 @@ A family-first mental offloading scheduling app built for a mom with ADHD. The a
 **Build And Test**
 1. Build: `./gradlew :composeApp:assembleDebug`
 2. Unit tests: `./gradlew :composeApp:test`
+3. Android unit tests: `./gradlew :composeApp:testDebugUnitTest`
+
+**Clear Cache**
+`adb shell am start -n com.debanshu.xcalendar/.MainActivity`
 
 **Signed Release (Android)**
 1. Create a release keystore (one-time):

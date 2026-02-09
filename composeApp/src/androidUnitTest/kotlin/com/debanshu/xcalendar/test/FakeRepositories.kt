@@ -1,6 +1,7 @@
 package com.debanshu.xcalendar.test
 
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.FamilyLensSelection
 import com.debanshu.xcalendar.domain.model.InboxItem
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
@@ -8,6 +9,7 @@ import com.debanshu.xcalendar.domain.model.Routine
 import com.debanshu.xcalendar.domain.model.Task
 import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
 import com.debanshu.xcalendar.domain.repository.IInboxRepository
+import com.debanshu.xcalendar.domain.repository.ILensPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IPersonRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
@@ -120,6 +122,16 @@ class FakeReminderPreferencesRepository : IReminderPreferencesRepository {
     ) = Unit
 }
 
+class FakeLensPreferencesRepository : ILensPreferencesRepository {
+    private val state = MutableStateFlow(FamilyLensSelection())
+
+    override val selection: Flow<FamilyLensSelection> = state
+
+    override suspend fun updateSelection(selection: FamilyLensSelection) {
+        state.value = selection
+    }
+}
+
 class FakeReminderScheduler : ReminderScheduler {
     val scheduledTasks = mutableListOf<Task>()
     val scheduledEvents = mutableListOf<Event>()
@@ -151,8 +163,13 @@ class FakeWidgetUpdater : WidgetUpdater {
 
 class FakeNotifier : PlatformNotifier {
     val messages = mutableListOf<String>()
+    val sharedPayloads = mutableListOf<Pair<String, String>>()
 
     override fun showToast(message: String) {
         messages.add(message)
+    }
+
+    override fun shareText(subject: String, text: String) {
+        sharedPayloads.add(subject to text)
     }
 }

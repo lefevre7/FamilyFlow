@@ -52,6 +52,7 @@ class ResolveSyncConflictUseCase(
                         calendarName = conflict.localEvent.calendarName,
                         color = conflict.localEvent.color,
                         syncedAt = now,
+                        affectedPersonIds = conflict.localEvent.affectedPersonIds,
                     )
                 eventRepository.addEvent(duplicate)
             }
@@ -91,6 +92,7 @@ class ResolveSyncConflictUseCase(
         calendarName: String,
         color: Int,
         syncedAt: Long,
+        affectedPersonIds: List<String>,
     ): Event =
         Event(
             id = Uuid.random().toString(),
@@ -110,5 +112,6 @@ class ResolveSyncConflictUseCase(
             externalId = id,
             externalUpdatedAt = updatedAt,
             lastSyncedAt = syncedAt,
+            affectedPersonIds = affectedPersonIds,
         )
 }

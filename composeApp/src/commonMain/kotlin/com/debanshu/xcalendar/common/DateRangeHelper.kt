@@ -91,7 +91,7 @@ object DateRangeHelper {
         val startDateTime = LocalDateTime(
             year = year,
             month = Month.JANUARY,
-            dayOfMonth = 1,
+            day = 1,
             hour = 0,
             minute = 0,
             second = 0,
@@ -101,7 +101,7 @@ object DateRangeHelper {
         val endDateTime = LocalDateTime(
             year = year,
             month = Month.DECEMBER,
-            dayOfMonth = 31,
+            day = 31,
             hour = 23,
             minute = 59,
             second = 59,
@@ -128,7 +128,7 @@ object DateRangeHelper {
         val startDateTime = LocalDateTime(
             year = year,
             month = kotlinMonth,
-            dayOfMonth = 1,
+            day = 1,
             hour = 0,
             minute = 0,
             second = 0,
@@ -142,7 +142,7 @@ object DateRangeHelper {
         val endDateTime = LocalDateTime(
             year = year,
             month = kotlinMonth,
-            dayOfMonth = lastDay,
+            day = lastDay,
             hour = 23,
             minute = 59,
             second = 59,
@@ -169,7 +169,7 @@ object DateRangeHelper {
         val endDateTime = LocalDateTime(
             year = date.year,
             month = date.month,
-            dayOfMonth = date.dayOfMonth,
+            day = date.day,
             hour = 23,
             minute = 59,
             second = 59,
@@ -231,4 +231,3 @@ object DateRangeHelper {
     fun localDateToEpoch(date: LocalDate): Long =
         date.atStartOfDayIn(getCurrentTimeZone()).toEpochMilliseconds()
 }
-

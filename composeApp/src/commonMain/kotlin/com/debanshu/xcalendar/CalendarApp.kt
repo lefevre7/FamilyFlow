@@ -34,6 +34,8 @@ import com.debanshu.xcalendar.ui.screen.onboardingScreen.OnboardingScreen
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.viewmodel.EventViewModel
+import com.debanshu.xcalendar.domain.model.ReminderPreferences
+import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.modules.SerializersModule
@@ -65,17 +67,18 @@ fun CalendarApp(
     val calendarViewModel = koinViewModel<CalendarViewModel>()
     val eventViewModel = koinViewModel<EventViewModel>()
     val dateStateHolder = koinInject<DateStateHolder>()
-    XCalendarTheme {
-        CalendarApp(
-            calendarViewModel = calendarViewModel,
-            eventViewModel = eventViewModel,
-            dateStateHolder = dateStateHolder,
-            quickAddRequests = quickAddRequests,
-            onQuickAddHandled = onQuickAddHandled,
-            showOnboardingInitially = showOnboardingInitially,
-            onOnboardingCompleted = onOnboardingCompleted,
-        )
-    }
+    val getReminderPreferencesUseCase = koinInject<GetReminderPreferencesUseCase>()
+    val reminderPreferences by remember { getReminderPreferencesUseCase() }.collectAsState(initial = ReminderPreferences())
+    CalendarApp(
+        calendarViewModel = calendarViewModel,
+        eventViewModel = eventViewModel,
+        dateStateHolder = dateStateHolder,
+        quickAddRequests = quickAddRequests,
+        onQuickAddHandled = onQuickAddHandled,
+        showOnboardingInitially = showOnboardingInitially,
+        onOnboardingCompleted = onOnboardingCompleted,
+        reminderPreferences = reminderPreferences,
+    )
 }
 
 @Composable
@@ -87,6 +90,7 @@ private fun CalendarApp(
     onQuickAddHandled: (() -> Unit)? = null,
     showOnboardingInitially: Boolean = false,
     onOnboardingCompleted: (() -> Unit)? = null,
+    reminderPreferences: ReminderPreferences = ReminderPreferences(),
 ) {
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventUiState by eventViewModel.uiState.collectAsState()
@@ -109,7 +113,6 @@ private fun CalendarApp(
     // Use EventViewModel as single source of truth for selected event
     // The details sheet visibility is derived from whether an event is selected
     val selectedEvent = eventUiState.selectedEvent
-    val showDetailsBottomSheet = selectedEvent != null
 
     val visibleCalendars by remember(calendarUiState.calendars) {
         derivedStateOf { calendarUiState.calendars.filter { it.isVisible } }
@@ -119,101 +122,113 @@ private fun CalendarApp(
     // Combine error messages from both ViewModels
     val displayError = calendarUiState.displayError ?: eventUiState.errorMessage
 
-    if (showOnboarding) {
-        OnboardingScreen(
-            onComplete = {
-                showOnboarding = false
-                onOnboardingCompleted?.invoke()
-            },
-            onSkip = {
-                showOnboarding = false
-                onOnboardingCompleted?.invoke()
-            },
-        )
-        return
-    }
+    XCalendarTheme(
+        highContrastEnabled = reminderPreferences.highContrastEnabled,
+        reducedMotionEnabled = reminderPreferences.reducedMotionEnabled,
+        textScale = reminderPreferences.textScale,
+    ) {
+        if (showOnboarding) {
+            OnboardingScreen(
+                onComplete = {
+                    showOnboarding = false
+                    onOnboardingCompleted?.invoke()
+                },
+                onSkip = {
+                    showOnboarding = false
+                    onOnboardingCompleted?.invoke()
+                },
+            )
+        } else {
+            Scaffold(
+                containerColor = XCalendarTheme.colorScheme.surfaceContainerLow,
+                snackbarHost = {
+                    ErrorSnackbar(
+                        message = displayError,
+                        onDismiss = {
+                            calendarViewModel.clearError()
+                            eventViewModel.clearError()
+                        },
+                    )
+                },
+            ) { paddingValues ->
+                Box {
+                    NavigationHost(
+                        modifier =
+                            Modifier.padding(
+                                top = paddingValues.calculateTopPadding(),
+                                start = paddingValues.calculateStartPadding(LayoutDirection.Ltr),
+                                end = paddingValues.calculateEndPadding(LayoutDirection.Ltr),
+                            ),
+                        backStack = backStack,
+                        dateStateHolder = dateStateHolder,
+                        events = events,
+                    )
+                    CalendarBottomNavigationBar(
+                        modifier =
+                            Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = paddingValues.calculateBottomPadding()),
+                        selectedView = backStack.lastOrNull() as? NavigableScreen ?: NavigableScreen.Today,
+                        onViewSelect = { view ->
+                            backStack.replaceLast(view)
+                        },
+                        onAddClick = {
+                            quickAddMode = QuickAddMode.TASK
+                            showQuickAddSheet = true
+                        },
+                        onAddTaskShortcut = {
+                            quickAddMode = QuickAddMode.TASK
+                            showQuickAddSheet = true
+                        },
+                        onAddEventShortcut = {
+                            showEventSheet = true
+                        },
+                        onAddVoiceShortcut = {
+                            quickAddMode = QuickAddMode.VOICE
+                            showQuickAddSheet = true
+                        },
+                    )
+                }
+                if (showQuickAddSheet) {
+                    QuickAddSheet(
+                        mode = quickAddMode,
+                        onModeChange = { quickAddMode = it },
+                        onRequestEvent = {
+                            showQuickAddSheet = false
+                            showEventSheet = true
+                        },
+                        onDismiss = { showQuickAddSheet = false },
+                    )
+                }
+                if (showEventSheet) {
+                    calendarUiState.accounts.firstOrNull()?.let {
+                        AddEventDialog(
+                            user = it,
+                            calendars = visibleCalendars.toImmutableList(),
+                            selectedDate = dataState.selectedDate,
+                            onSave = { event ->
+                                eventViewModel.addEvent(event)
+                                showEventSheet = false
+                            },
+                            onDismiss = {
+                                showEventSheet = false
+                            },
+                        )
+                    }
+                }
 
-    Scaffold(
-        containerColor = XCalendarTheme.colorScheme.surfaceContainerLow,
-        snackbarHost = {
-            ErrorSnackbar(
-                message = displayError,
-                onDismiss = {
-                    calendarViewModel.clearError()
-                    eventViewModel.clearError()
-                },
-            )
-        },
-    ) { paddingValues ->
-        Box {
-            NavigationHost(
-                modifier =
-                    Modifier.padding(
-                        top = paddingValues.calculateTopPadding(),
-                        start = paddingValues.calculateStartPadding(LayoutDirection.Ltr),
-                        end = paddingValues.calculateEndPadding(LayoutDirection.Ltr),
-                    ),
-                backStack = backStack,
-                dateStateHolder = dateStateHolder,
-                events = events,
-            )
-            CalendarBottomNavigationBar(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = paddingValues.calculateBottomPadding()),
-                selectedView = backStack.lastOrNull() as? NavigableScreen ?: NavigableScreen.Today,
-                onViewSelect = { view ->
-                    backStack.replaceLast(view)
-                },
-                onAddClick = {
-                    quickAddMode = QuickAddMode.TASK
-                    showQuickAddSheet = true
-                },
-                onAddLongPress = {
-                    quickAddMode = QuickAddMode.VOICE
-                    showQuickAddSheet = true
-                },
-            )
-        }
-        if (showQuickAddSheet) {
-            QuickAddSheet(
-                mode = quickAddMode,
-                onModeChange = { quickAddMode = it },
-                onRequestEvent = {
-                    showQuickAddSheet = false
-                    showEventSheet = true
-                },
-                onDismiss = { showQuickAddSheet = false },
-            )
-        }
-        if (showEventSheet) {
-            calendarUiState.accounts.firstOrNull()?.let {
-                AddEventDialog(
-                    user = it,
-                    calendars = visibleCalendars.toImmutableList(),
-                    selectedDate = dataState.selectedDate,
-                    onSave = { event ->
-                        eventViewModel.addEvent(event)
-                        showEventSheet = false
-                    },
-                    onDismiss = {
-                        showEventSheet = false
-                    },
-                )
+                selectedEvent?.let { selected ->
+                    EventDetailsDialog(
+                        event = selected,
+                        onEdit = { editedEvent ->
+                            eventViewModel.editEvent(editedEvent)
+                        },
+                        onDismiss = {
+                            eventViewModel.clearSelectedEvent()
+                        },
+                    )
+                }
             }
-        }
-
-        if (showDetailsBottomSheet && selectedEvent != null) {
-            EventDetailsDialog(
-                event = selectedEvent,
-                onEdit = { editedEvent ->
-                    eventViewModel.editEvent(editedEvent)
-                },
-                onDismiss = {
-                    eventViewModel.clearSelectedEvent()
-                },
-            )
         }
     }
 }

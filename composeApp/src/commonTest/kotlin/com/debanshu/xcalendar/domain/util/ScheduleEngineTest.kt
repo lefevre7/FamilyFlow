@@ -194,4 +194,93 @@ class ScheduleEngineTest {
             assertTrue(!overlapsBusy)
         }
     }
+
+    @Test
+    fun aggregate_enforcesDefaultDailyLoadCapForMustShouldSuggestions() {
+        val timeZone = TimeZone.currentSystemDefault()
+        val nowMillis = Clock.System.now().toEpochMilliseconds()
+        val today = Instant.fromEpochMilliseconds(nowMillis).toLocalDateTime(timeZone).date
+        val dayStart = today.atStartOfDayIn(timeZone).toEpochMilliseconds()
+
+        val scheduledMustShould =
+            (0 until 5).map { index ->
+                val start = dayStart + (8 + index) * 60 * 60 * 1000L
+                Task(
+                    id = "scheduled-$index",
+                    title = "Scheduled $index",
+                    status = TaskStatus.OPEN,
+                    priority = if (index % 2 == 0) TaskPriority.MUST else TaskPriority.SHOULD,
+                    scheduledStart = start,
+                    scheduledEnd = start + 30 * 60 * 1000L,
+                )
+            }
+        val extraMust =
+            Task(
+                id = "task-extra-must",
+                title = "Extra must",
+                status = TaskStatus.OPEN,
+                priority = TaskPriority.MUST,
+                scheduledStart = null,
+                scheduledEnd = null,
+            )
+        val extraShould =
+            Task(
+                id = "task-extra-should",
+                title = "Extra should",
+                status = TaskStatus.OPEN,
+                priority = TaskPriority.SHOULD,
+                scheduledStart = null,
+                scheduledEnd = null,
+            )
+
+        val result =
+            ScheduleEngine.aggregate(
+                events = emptyList(),
+                tasks = scheduledMustShould + extraMust + extraShould,
+                filter = ScheduleFilter(),
+                nowMillis = nowMillis,
+                timeZone = timeZone,
+            )
+
+        assertTrue(result.suggestions.none { it.taskId == extraMust.id })
+        assertTrue(result.suggestions.none { it.taskId == extraShould.id })
+    }
+
+    @Test
+    fun aggregate_ordersFlexibleSuggestionsByPriorityThenDueDate() {
+        val timeZone = TimeZone.currentSystemDefault()
+        val nowMillis = Clock.System.now().toEpochMilliseconds()
+        val soonDueShould =
+            Task(
+                id = "task-soon",
+                title = "Soon due",
+                status = TaskStatus.OPEN,
+                priority = TaskPriority.SHOULD,
+                dueAt = nowMillis + 2 * 60 * 60 * 1000L,
+                scheduledStart = null,
+                scheduledEnd = null,
+            )
+        val laterDueShould =
+            Task(
+                id = "task-later",
+                title = "Later due",
+                status = TaskStatus.OPEN,
+                priority = TaskPriority.SHOULD,
+                dueAt = nowMillis + 10 * 60 * 60 * 1000L,
+                scheduledStart = null,
+                scheduledEnd = null,
+            )
+
+        val result =
+            ScheduleEngine.aggregate(
+                events = emptyList(),
+                tasks = listOf(laterDueShould, soonDueShould),
+                filter = ScheduleFilter(),
+                nowMillis = nowMillis,
+                timeZone = timeZone,
+            )
+
+        val firstSuggestedTaskId = result.suggestions.firstOrNull()?.taskId
+        assertEquals(soonDueShould.id, firstSuggestedTaskId)
+    }
 }

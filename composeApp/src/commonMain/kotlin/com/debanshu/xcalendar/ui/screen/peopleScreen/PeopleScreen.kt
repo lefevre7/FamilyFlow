@@ -2,6 +2,9 @@ package com.debanshu.xcalendar.ui.screen.peopleScreen
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -105,7 +108,10 @@ fun PeopleScreen(
     )
 
     Column(
-        modifier = modifier.padding(16.dp),
+        modifier =
+            modifier
+                .verticalScroll(rememberScrollState())
+                .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 104.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
@@ -114,7 +120,7 @@ fun PeopleScreen(
             color = XCalendarTheme.colorScheme.onSurface,
         )
         Text(
-            text = "Mom is admin. Other profiles are view-only.",
+            text = "Only Mom can connect and manage Google calendars. All profiles are editable.",
             style = XCalendarTheme.typography.bodyMedium,
             color = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
@@ -145,9 +151,7 @@ fun PeopleScreen(
                         }
                     },
                     onEdit = {
-                        if (person.isAdmin) {
-                            editTarget = person
-                        }
+                        editTarget = person
                     },
                 )
             }
@@ -254,12 +258,12 @@ private fun PersonCard(
                             if (person.isAdmin) {
                                 RoleChip(label = "Admin")
                             } else {
-                                RoleChip(label = "View only")
+                                RoleChip(label = "Calendar view only")
                             }
                         }
                     }
                 }
-                TextButton(onClick = onEdit, enabled = person.isAdmin) {
+                TextButton(onClick = onEdit) {
                     Text("Edit")
                 }
             }
@@ -397,7 +401,10 @@ private fun EditPersonDialog(
                     style = XCalendarTheme.typography.bodyMedium,
                     color = XCalendarTheme.colorScheme.onSurfaceVariant,
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
                     colorChoices().forEach { colorValue ->
                         val isSelected = colorValue == selectedColor
                         Box(

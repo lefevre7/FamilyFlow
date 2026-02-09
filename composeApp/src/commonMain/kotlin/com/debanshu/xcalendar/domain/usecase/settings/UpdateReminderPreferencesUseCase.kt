@@ -28,4 +28,13 @@ class UpdateReminderPreferencesUseCase(
         middayHour: Int,
         middayMinute: Int,
     ) = repository.setSummaryTimes(morningHour, morningMinute, middayHour, middayMinute)
+
+    suspend fun setReducedMotionEnabled(enabled: Boolean) =
+        repository.setReducedMotionEnabled(enabled)
+
+    suspend fun setHighContrastEnabled(enabled: Boolean) =
+        repository.setHighContrastEnabled(enabled)
+
+    suspend fun setTextScale(scale: Float) =
+        repository.setTextScale(scale)
 }

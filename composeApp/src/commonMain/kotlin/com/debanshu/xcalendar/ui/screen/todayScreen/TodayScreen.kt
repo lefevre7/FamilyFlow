@@ -21,7 +21,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -32,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -39,26 +39,35 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.common.toLocalDateTime
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.FamilyLensSelection
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.Routine
 import com.debanshu.xcalendar.domain.model.ScheduleFilter
 import com.debanshu.xcalendar.domain.model.ScheduleItem
+import com.debanshu.xcalendar.domain.model.ScheduleSource
 import com.debanshu.xcalendar.domain.model.TaskEnergy
 import com.debanshu.xcalendar.domain.model.TaskPriority
 import com.debanshu.xcalendar.domain.model.TaskStatus
+import com.debanshu.xcalendar.domain.usecase.event.UpdateEventUseCase
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
+import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.platform.PlatformNotifier
+import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
 import com.debanshu.xcalendar.ui.state.ActiveTimer
-import com.debanshu.xcalendar.ui.state.TimerStateHolder
 import com.debanshu.xcalendar.ui.state.DateStateHolder
+import com.debanshu.xcalendar.ui.state.LensStateHolder
+import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
+import com.debanshu.xcalendar.ui.state.TimerStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.utils.DateTimeFormatter
 import kotlinx.collections.immutable.ImmutableList
@@ -66,16 +75,15 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import org.koin.mp.KoinPlatform
 import kotlin.time.Clock
+import com.debanshu.xcalendar.domain.model.effectivePersonId
 
 private const val NOW_WINDOW_MINUTES = 30
 private const val MAX_VISIBLE_PER_SECTION = 3
-
-private enum class FamilyLens {
-    FAMILY,
-    MOM,
-}
+private const val SNOOZE_MINUTES = 30
 
 private enum class DaySection {
     MORNING,
@@ -89,6 +97,7 @@ fun TodayScreen(
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
     isVisible: Boolean = true,
+    onNavigateToSettings: () -> Unit = {},
 ) {
     if (!isVisible) return
 
@@ -96,11 +105,14 @@ fun TodayScreen(
     val timeZone = remember { TimeZone.currentSystemDefault() }
     val nowMillis = Clock.System.now().toEpochMilliseconds()
     val nowHour = nowMillis.toLocalDateTime(timeZone).hour
+    val scope = rememberCoroutineScope()
 
     val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val getTasksUseCase = koinInject<GetTasksUseCase>()
     val getRoutinesUseCase = koinInject<GetRoutinesUseCase>()
     val timerStateHolder = koinInject<TimerStateHolder>()
+    val lensStateHolder = koinInject<LensStateHolder>()
+    val conflictStateHolder = koinInject<SyncConflictStateHolder>()
     val notifier = koinInject<PlatformNotifier>()
     val haptic = LocalHapticFeedback.current
 
@@ -111,7 +123,9 @@ fun TodayScreen(
     val people by peopleFlow.collectAsState(initial = emptyList())
     val tasks by tasksFlow.collectAsState(initial = emptyList())
     val routines by routinesFlow.collectAsState(initial = emptyList())
+    val conflicts by conflictStateHolder.conflicts.collectAsState()
     val timerState by timerStateHolder.timer.collectAsState()
+    val lensSelection by lensStateHolder.selection.collectAsState()
     var remainingMillis by remember(timerState?.endsAt) {
         mutableStateOf(timerState?.endsAt?.minus(System.currentTimeMillis()) ?: 0L)
     }
@@ -133,8 +147,8 @@ fun TodayScreen(
     }
 
     val momId = remember(people) { people.firstOrNull { it.role == PersonRole.MOM }?.id }
-    var lens by rememberSaveable { mutableStateOf(FamilyLens.MOM) }
     var todayOnly by rememberSaveable { mutableStateOf(false) }
+    var dismissedEventIds by rememberSaveable(dateState.selectedDate) { mutableStateOf(emptyList<String>()) }
 
     val isToday = dateState.selectedDate == dateState.currentDate
     LaunchedEffect(isToday) {
@@ -167,12 +181,12 @@ fun TodayScreen(
             }
     }
 
-    val filter = remember(lens, momId, todayOnly, isToday) {
+    val filter = remember(lensSelection, momId) {
         ScheduleFilter(
-            personId = if (lens == FamilyLens.MOM && momId != null) momId else null,
+            personId = lensSelection.effectivePersonId(momId),
             onlyMust = false,
             includeUnassignedEvents = true,
-            nowWindowMinutes = if (todayOnly && isToday) NOW_WINDOW_MINUTES else null,
+            nowWindowMinutes = null,
         )
     }
 
@@ -186,11 +200,15 @@ fun TodayScreen(
         )
     }
 
-    val scheduleItems = remember(aggregation.items, todayOnly) {
-        if (todayOnly) {
-            aggregation.items.filter { it.startTime != null }
+    val scheduleItems = remember(aggregation.items, todayOnly, isToday, nowMillis, dismissedEventIds) {
+        val activeItems =
+            aggregation.items.filterNot { item ->
+                item.source == ScheduleSource.EVENT && dismissedEventIds.contains(item.id)
+            }
+        if (todayOnly && isToday) {
+            activeItems.filter { shouldShowInTodayOnly(item = it, nowMillis = nowMillis) }
         } else {
-            aggregation.items
+            activeItems
         }
     }
 
@@ -203,6 +221,127 @@ fun TodayScreen(
     }
 
     val peopleById = remember(people) { people.associateBy { it.id } }
+    val snapshotText = remember(dateState.selectedDate, scheduleItems, peopleById, timeZone) {
+        buildTodaySnapshotText(
+            date = dateState.selectedDate,
+            items = scheduleItems,
+            peopleById = peopleById,
+            timeZone = timeZone,
+        )
+    }
+
+    val onDoneItem: (ScheduleItem) -> Unit = remember(scope, notifier) {
+        { item ->
+            when (item.source) {
+                ScheduleSource.TASK -> {
+                    val task = item.originalTask
+                    if (task != null) {
+                        val updateTaskUseCase =
+                            runCatching { KoinPlatform.getKoin().get<UpdateTaskUseCase>() }.getOrNull()
+                        if (updateTaskUseCase == null) {
+                            notifier.showToast("Done action unavailable")
+                        } else {
+                            scope.launch {
+                                val updatedAt = Clock.System.now().toEpochMilliseconds()
+                                updateTaskUseCase(task.copy(status = TaskStatus.DONE, updatedAt = updatedAt))
+                                notifier.showToast("Marked done")
+                            }
+                        }
+                    }
+                }
+                ScheduleSource.EVENT -> {
+                    dismissedEventIds = (dismissedEventIds + item.id).distinct()
+                    notifier.showToast("Hidden from today")
+                }
+            }
+        }
+    }
+
+    val onSnoozeItem: (ScheduleItem) -> Unit =
+        remember(scope, notifier) {
+            { item ->
+                val snoozeMillis = SNOOZE_MINUTES * 60_000L
+                when (item.source) {
+                    ScheduleSource.TASK -> {
+                        val task = item.originalTask
+                        if (task != null) {
+                            val updateTaskUseCase =
+                                runCatching { KoinPlatform.getKoin().get<UpdateTaskUseCase>() }.getOrNull()
+                            if (updateTaskUseCase == null) {
+                                notifier.showToast("Snooze action unavailable")
+                            } else {
+                                scope.launch {
+                                    val actionNow = Clock.System.now().toEpochMilliseconds()
+                                    val scheduledStart = task.scheduledStart
+                                    val scheduledEnd = task.scheduledEnd
+                                    val hasSchedule = scheduledStart != null && scheduledEnd != null
+                                    val nextStart =
+                                        if (hasSchedule) {
+                                            scheduledStart + snoozeMillis
+                                        } else {
+                                            actionNow + snoozeMillis
+                                        }
+                                    val nextEnd =
+                                        if (hasSchedule) {
+                                            scheduledEnd + snoozeMillis
+                                        } else {
+                                            nextStart + task.durationMinutes * 60_000L
+                                        }
+                                    updateTaskUseCase(
+                                        task.copy(
+                                            status = TaskStatus.OPEN,
+                                            scheduledStart = nextStart,
+                                            scheduledEnd = nextEnd,
+                                            updatedAt = actionNow,
+                                        ),
+                                    )
+                                    notifier.showToast("Snoozed $SNOOZE_MINUTES minutes")
+                                }
+                            }
+                        }
+                    }
+                    ScheduleSource.EVENT -> {
+                        val event = item.originalEvent
+                        if (event != null) {
+                            if (event.isAllDay) {
+                                notifier.showToast("All-day events cannot be snoozed")
+                            } else {
+                                val updateEventUseCase =
+                                    runCatching { KoinPlatform.getKoin().get<UpdateEventUseCase>() }.getOrNull()
+                                if (updateEventUseCase == null) {
+                                    notifier.showToast("Snooze action unavailable")
+                                } else {
+                                    scope.launch {
+                                        val result =
+                                            updateEventUseCase(
+                                                event.copy(
+                                                    startTime = event.startTime + snoozeMillis,
+                                                    endTime = event.endTime + snoozeMillis,
+                                                ),
+                                            )
+                                        when (result) {
+                                            is com.debanshu.xcalendar.domain.util.DomainResult.Success ->
+                                                notifier.showToast("Snoozed $SNOOZE_MINUTES minutes")
+                                            is com.debanshu.xcalendar.domain.util.DomainResult.Error ->
+                                                notifier.showToast(result.error.message)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+    val onShareItem: (ScheduleItem) -> Unit = remember(notifier, peopleById, timeZone) {
+        { item ->
+            notifier.shareText(
+                subject = "ADHD MOM - Today item",
+                text = buildItemShareText(item = item, peopleById = peopleById, timeZone = timeZone),
+            )
+        }
+    }
 
     var morningExpanded by rememberSaveable(dateState.selectedDate) { mutableStateOf(false) }
     var afternoonExpanded by rememberSaveable(dateState.selectedDate) { mutableStateOf(false) }
@@ -221,19 +360,39 @@ fun TodayScreen(
         }
         TodayHeader(
             date = dateState.selectedDate,
-            lens = lens,
-            onLensChange = { lens = it },
+            lensSelection = lensSelection,
+            people = people,
+            onLensChange = lensStateHolder::updateSelection,
             todayOnly = todayOnly,
             onTodayOnlyChange = { todayOnly = it },
             todayOnlyEnabled = isToday,
+            onShareSnapshot = {
+                notifier.shareText(
+                    subject = "ADHD MOM - Today's snapshot",
+                    text = snapshotText,
+                )
+            },
         )
+
+        if (conflicts.isNotEmpty()) {
+            ConflictReviewBanner(
+                conflictCount = conflicts.size,
+                onOpenSettings = onNavigateToSettings,
+            )
+        }
 
         if (activeRoutines.isNotEmpty()) {
             RoutineSection(routines = activeRoutines)
         }
 
         if (todayOnly) {
-            NowSection(items = scheduleItems, peopleById = peopleById)
+            NowSection(
+                items = scheduleItems,
+                peopleById = peopleById,
+                onDone = onDoneItem,
+                onSnooze = onSnoozeItem,
+                onShare = onShareItem,
+            )
         } else {
             val morningItems = groupedItems[DaySection.MORNING].orEmpty()
             val afternoonItems = groupedItems[DaySection.AFTERNOON].orEmpty()
@@ -250,6 +409,9 @@ fun TodayScreen(
                         expanded = morningExpanded,
                         onToggleExpand = { morningExpanded = !morningExpanded },
                         peopleById = peopleById,
+                        onDone = onDoneItem,
+                        onSnooze = onSnoozeItem,
+                        onShare = onShareItem,
                     )
                 }
                 if (afternoonItems.isNotEmpty()) {
@@ -259,6 +421,9 @@ fun TodayScreen(
                         expanded = afternoonExpanded,
                         onToggleExpand = { afternoonExpanded = !afternoonExpanded },
                         peopleById = peopleById,
+                        onDone = onDoneItem,
+                        onSnooze = onSnoozeItem,
+                        onShare = onShareItem,
                     )
                 }
                 if (eveningItems.isNotEmpty()) {
@@ -268,6 +433,9 @@ fun TodayScreen(
                         expanded = eveningExpanded,
                         onToggleExpand = { eveningExpanded = !eveningExpanded },
                         peopleById = peopleById,
+                        onDone = onDoneItem,
+                        onSnooze = onSnoozeItem,
+                        onShare = onShareItem,
                     )
                 }
             }
@@ -279,11 +447,13 @@ fun TodayScreen(
 @Composable
 private fun TodayHeader(
     date: LocalDate,
-    lens: FamilyLens,
-    onLensChange: (FamilyLens) -> Unit,
+    lensSelection: FamilyLensSelection,
+    people: List<Person>,
+    onLensChange: (FamilyLensSelection) -> Unit,
     todayOnly: Boolean,
     onTodayOnlyChange: (Boolean) -> Unit,
     todayOnlyEnabled: Boolean,
+    onShareSnapshot: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -296,31 +466,67 @@ private fun TodayHeader(
             style = XCalendarTheme.typography.bodyLarge,
             color = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
+        FamilyLensMiniHeader(
+            selection = lensSelection,
+            people = people,
+            onSelectionChange = onLensChange,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = lens == FamilyLens.FAMILY,
-                onClick = { onLensChange(FamilyLens.FAMILY) },
-                label = { Text("Family") },
-            )
-            FilterChip(
-                selected = lens == FamilyLens.MOM,
-                onClick = { onLensChange(FamilyLens.MOM) },
-                label = { Text("Mom") },
-            )
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = todayOnly,
+            TextButton(
                 onClick = { onTodayOnlyChange(!todayOnly) },
                 enabled = todayOnlyEnabled,
-                label = { Text("Today Only") },
-            )
+                modifier =
+                    Modifier.semantics {
+                        contentDescription =
+                            if (todayOnly) {
+                                "Today only filter on. Double tap to show the full day."
+                            } else {
+                                "Today only filter off. Double tap to show only items near now."
+                            }
+                    },
+            ) {
+                Text(if (todayOnly) "Today Only: On" else "Today Only: Off")
+            }
+            TextButton(
+                onClick = onShareSnapshot,
+                modifier = Modifier.semantics { contentDescription = "Share today snapshot" },
+            ) { Text("Share snapshot") }
             Text(
                 text = "Hide everything except now",
                 style = XCalendarTheme.typography.bodySmall,
                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.align(Alignment.CenterVertically),
             )
+        }
+    }
+}
+
+@Composable
+private fun ConflictReviewBanner(
+    conflictCount: Int,
+    onOpenSettings: () -> Unit,
+) {
+    Card(shape = RoundedCornerShape(16.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Conflicts need review",
+                style = XCalendarTheme.typography.titleMedium,
+                color = XCalendarTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "$conflictCount sync conflict(s) are waiting in Settings.",
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.semantics { contentDescription = "Open Settings to review sync conflicts" },
+            ) {
+                Text("Open Settings")
+            }
         }
     }
 }
@@ -382,6 +588,9 @@ private fun RoutineCard(routine: Routine) {
 private fun NowSection(
     items: List<ScheduleItem>,
     peopleById: Map<String, Person>,
+    onDone: (ScheduleItem) -> Unit,
+    onSnooze: (ScheduleItem) -> Unit,
+    onShare: (ScheduleItem) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -393,7 +602,13 @@ private fun NowSection(
             EmptySection(message = "No items in the current window.")
         } else {
             items.forEach { item ->
-                ScheduleItemCard(item = item, peopleById = peopleById)
+                ScheduleItemCard(
+                    item = item,
+                    peopleById = peopleById,
+                    onDone = onDone,
+                    onSnooze = onSnooze,
+                    onShare = onShare,
+                )
             }
         }
     }
@@ -406,6 +621,9 @@ private fun DaySectionGroup(
     expanded: Boolean,
     onToggleExpand: () -> Unit,
     peopleById: Map<String, Person>,
+    onDone: (ScheduleItem) -> Unit,
+    onSnooze: (ScheduleItem) -> Unit,
+    onShare: (ScheduleItem) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -415,7 +633,13 @@ private fun DaySectionGroup(
         )
         val visibleItems = if (expanded) items else items.take(MAX_VISIBLE_PER_SECTION)
         visibleItems.forEach { item ->
-            ScheduleItemCard(item = item, peopleById = peopleById)
+            ScheduleItemCard(
+                item = item,
+                peopleById = peopleById,
+                onDone = onDone,
+                onSnooze = onSnooze,
+                onShare = onShare,
+            )
         }
         val hiddenCount = items.size - visibleItems.size
         if (hiddenCount > 0 && !expanded) {
@@ -435,9 +659,13 @@ private fun DaySectionGroup(
 private fun ScheduleItemCard(
     item: ScheduleItem,
     peopleById: Map<String, Person>,
+    onDone: (ScheduleItem) -> Unit,
+    onSnooze: (ScheduleItem) -> Unit,
+    onShare: (ScheduleItem) -> Unit,
 ) {
     val timerStateHolder = koinInject<TimerStateHolder>()
     val people = item.personIds.mapNotNull { peopleById[it] }
+    val whoAffectedLabel = people.joinToString(", ") { it.name }.ifBlank { null }
     val accentColor = resolveAccentColor(item, people, XCalendarTheme.colorScheme.primary)
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -468,6 +696,13 @@ private fun ScheduleItemCard(
                     style = XCalendarTheme.typography.titleMedium,
                     color = XCalendarTheme.colorScheme.onSurface,
                 )
+                whoAffectedLabel?.let { names ->
+                    Text(
+                        text = "Who's affected: $names",
+                        style = XCalendarTheme.typography.bodySmall,
+                        color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     PriorityChip(priority = item.priority)
                     EnergyChip(energy = item.energy)
@@ -478,21 +713,31 @@ private fun ScheduleItemCard(
                             val now = System.currentTimeMillis()
                             val duration =
                                 when (item.source) {
-                                    com.debanshu.xcalendar.domain.model.ScheduleSource.EVENT -> {
+                                    ScheduleSource.EVENT -> {
                                         val end = item.endTime ?: now
                                         (end - now).coerceAtLeast(60_000L)
                                     }
-                                    com.debanshu.xcalendar.domain.model.ScheduleSource.TASK -> {
+                                    ScheduleSource.TASK -> {
                                         val minutes = item.originalTask?.durationMinutes ?: 30
                                         minutes * 60_000L
                                     }
                                 }
                             timerStateHolder.startTimer(item.id, item.title, duration)
-                        }
+                        },
+                        modifier = Modifier.semantics { contentDescription = "Start timer for ${item.title}" },
                     ) { Text("Start") }
-                    TextButton(onClick = { }) { Text("Done") }
-                    TextButton(onClick = { }) { Text("Snooze") }
-                    TextButton(onClick = { }) { Text("Share") }
+                    TextButton(
+                        onClick = { onDone(item) },
+                        modifier = Modifier.semantics { contentDescription = "Mark ${item.title} done" },
+                    ) { Text("Done") }
+                    TextButton(
+                        onClick = { onSnooze(item) },
+                        modifier = Modifier.semantics { contentDescription = "Snooze ${item.title}" },
+                    ) { Text("Snooze") }
+                    TextButton(
+                        onClick = { onShare(item) },
+                        modifier = Modifier.semantics { contentDescription = "Share ${item.title}" },
+                    ) { Text("Share") }
                 }
             }
         }
@@ -654,6 +899,65 @@ private fun formatFullDate(date: LocalDate): String {
     val dayOfWeek = date.dayOfWeek.name.lowercase().replaceFirstChar { it.titlecase() }
     val month = date.month.name.lowercase().replaceFirstChar { it.titlecase() }
     return "$dayOfWeek, ${date.day} $month"
+}
+
+private fun shouldShowInTodayOnly(item: ScheduleItem, nowMillis: Long): Boolean {
+    val start = item.startTime ?: return false
+    val end = item.endTime
+    val windowMillis = NOW_WINDOW_MINUTES * 60_000L
+    val activeNow = end != null && nowMillis in start..end
+    val startsInWindow = start in (nowMillis - windowMillis)..(nowMillis + windowMillis)
+    return activeNow || startsInWindow
+}
+
+private fun buildTodaySnapshotText(
+    date: LocalDate,
+    items: List<ScheduleItem>,
+    peopleById: Map<String, Person>,
+    timeZone: TimeZone,
+): String {
+    val dateLabel = formatFullDate(date)
+    if (items.isEmpty()) return "Today snapshot ($dateLabel)\nNo scheduled items."
+
+    val lines =
+        items.take(12).mapIndexed { index, item ->
+            val who =
+                item.personIds
+                    .mapNotNull { peopleById[it]?.name }
+                    .distinct()
+                    .joinToString(", ")
+                    .ifBlank { "Family" }
+            "${index + 1}. ${formatTimeLabelForShare(item, timeZone)} ${item.title} ($who)"
+        }
+
+    return buildString {
+        appendLine("Today snapshot ($dateLabel)")
+        lines.forEach { appendLine(it) }
+    }.trim()
+}
+
+private fun buildItemShareText(
+    item: ScheduleItem,
+    peopleById: Map<String, Person>,
+    timeZone: TimeZone,
+): String {
+    val who =
+        item.personIds
+            .mapNotNull { peopleById[it]?.name }
+            .distinct()
+            .joinToString(", ")
+            .ifBlank { "Family" }
+    return "${formatTimeLabelForShare(item, timeZone)} ${item.title}\nWho's affected: $who"
+}
+
+private fun formatTimeLabelForShare(item: ScheduleItem, timeZone: TimeZone): String {
+    if (item.isAllDay) return "[All day]"
+    val start = item.startTime
+    val end = item.endTime
+    if (start == null || end == null) return "[Flexible]"
+    val startLocal = start.toLocalDateTime(timeZone)
+    val endLocal = end.toLocalDateTime(timeZone)
+    return "[${DateTimeFormatter.formatCompactTimeRange(startLocal, endLocal)}]"
 }
 
 private fun overlaps(start: Long, end: Long, windowStart: Long, windowEnd: Long): Boolean {

@@ -22,4 +22,10 @@ interface IReminderPreferencesRepository {
         middayHour: Int,
         middayMinute: Int,
     )
+
+    suspend fun setReducedMotionEnabled(enabled: Boolean) {}
+
+    suspend fun setHighContrastEnabled(enabled: Boolean) {}
+
+    suspend fun setTextScale(scale: Float) {}
 }

@@ -5,6 +5,7 @@ import com.debanshu.xcalendar.domain.model.Routine
 import com.debanshu.xcalendar.domain.model.Task
 import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
 import com.debanshu.xcalendar.domain.repository.IInboxRepository
+import com.debanshu.xcalendar.domain.repository.ILensPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IPersonRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
@@ -15,8 +16,11 @@ import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
 import com.debanshu.xcalendar.domain.usecase.task.CreateTaskUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
+import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
 import com.debanshu.xcalendar.platform.PlatformNotifier
+import com.debanshu.xcalendar.ui.state.LensStateHolder
+import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import com.debanshu.xcalendar.ui.state.TimerStateHolder
 import org.koin.core.module.Module
 import org.koin.dsl.module
@@ -48,6 +52,7 @@ fun buildTestDependencies(
             single<IRoutineRepository> { FakeRoutineRepository(routines) }
             single<IInboxRepository> { inboxRepository }
             single<IReminderPreferencesRepository> { FakeReminderPreferencesRepository() }
+            single<ILensPreferencesRepository> { FakeLensPreferencesRepository() }
             single<ReminderScheduler> { reminderScheduler }
             single<WidgetUpdater> { widgetUpdater }
             single<PlatformNotifier> { notifier }
@@ -57,8 +62,11 @@ fun buildTestDependencies(
             single { GetRoutinesUseCase(get()) }
             single { GetReminderPreferencesUseCase(get()) }
             single { CreateTaskUseCase(get(), get(), get(), get()) }
+            single { UpdateTaskUseCase(get(), get(), get(), get()) }
             single { CreateInboxItemUseCase(get()) }
             single { TimerStateHolder() }
+            single { LensStateHolder(get()) }
+            single { SyncConflictStateHolder() }
         }
 
     return TestDependencies(

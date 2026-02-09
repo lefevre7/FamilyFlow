@@ -19,14 +19,19 @@ import androidx.compose.material3.ModalBottomSheetProperties
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.utils.DateTimeFormatter
+import org.koin.compose.koinInject
 import org.jetbrains.compose.resources.painterResource
 import xcalendar.composeapp.generated.resources.Res
 import xcalendar.composeapp.generated.resources.ic_close
@@ -45,6 +50,14 @@ fun EventDetailsDialog(
     onEdit: (Event) -> Unit,
     onDismiss: () -> Unit = {},
 ) {
+    val getPeopleUseCase = koinInject<GetPeopleUseCase>()
+    val people by remember { getPeopleUseCase() }.collectAsState(initial = emptyList())
+    val peopleById = remember(people) { people.associateBy { it.id } }
+    val whoAffectedNames =
+        remember(event.affectedPersonIds, peopleById) {
+            event.affectedPersonIds.mapNotNull { peopleById[it]?.name }.joinToString(", ").ifBlank { null }
+        }
+
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     
     ModalBottomSheet(
@@ -95,6 +108,13 @@ fun EventDetailsDialog(
                 DetailRow(
                     icon = Res.drawable.ic_location,
                     text = location,
+                )
+            }
+
+            whoAffectedNames?.let { names ->
+                DetailRow(
+                    icon = Res.drawable.ic_description,
+                    text = "Who's affected: $names",
                 )
             }
 
@@ -217,5 +237,4 @@ private fun DetailRow(
         )
     }
 }
-
 

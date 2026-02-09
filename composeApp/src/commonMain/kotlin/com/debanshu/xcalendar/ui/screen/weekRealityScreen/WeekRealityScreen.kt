@@ -33,20 +33,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.common.toLocalDateTime
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.FamilyLensSelection
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.ScheduleFilter
 import com.debanshu.xcalendar.domain.model.ScheduleItem
 import com.debanshu.xcalendar.domain.model.TaskStatus
+import com.debanshu.xcalendar.domain.model.effectivePersonId
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
+import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
 import com.debanshu.xcalendar.ui.components.SwipeablePager
 import com.debanshu.xcalendar.ui.state.DateStateHolder
+import com.debanshu.xcalendar.ui.state.LensStateHolder
+import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.utils.DateTimeFormatter
 import kotlinx.collections.immutable.ImmutableList
@@ -73,6 +80,7 @@ fun WeekRealityScreen(
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
     isVisible: Boolean = true,
+    onNavigateToSettings: () -> Unit = {},
 ) {
     if (!isVisible) return
 
@@ -82,15 +90,19 @@ fun WeekRealityScreen(
 
     val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val getTasksUseCase = koinInject<GetTasksUseCase>()
+    val lensStateHolder = koinInject<LensStateHolder>()
+    val conflictStateHolder = koinInject<SyncConflictStateHolder>()
 
     val peopleFlow = remember { getPeopleUseCase() }
     val tasksFlow = remember { getTasksUseCase() }
 
     val people by peopleFlow.collectAsState(initial = emptyList())
     val tasks by tasksFlow.collectAsState(initial = emptyList())
+    val lensSelection by lensStateHolder.selection.collectAsState()
+    val conflicts by conflictStateHolder.conflicts.collectAsState()
 
     val momId = remember(people) { people.firstOrNull { it.role == PersonRole.MOM }?.id }
-    var onlyMom by rememberSaveable { mutableStateOf(false) }
+    var onlyMomRequired by rememberSaveable { mutableStateOf(false) }
     var onlyMust by rememberSaveable { mutableStateOf(false) }
 
     val currentWeekStart = remember(dateState.selectedDate) { startOfWeek(dateState.selectedDate) }
@@ -117,15 +129,19 @@ fun WeekRealityScreen(
             tasks = tasks,
             people = people,
             momId = momId,
-            onlyMom = onlyMom,
+            lensSelection = lensSelection,
+            onlyMomRequired = onlyMomRequired,
             onlyMust = onlyMust,
-            onToggleOnlyMom = { onlyMom = !onlyMom },
+            onLensChange = lensStateHolder::updateSelection,
+            onToggleOnlyMomRequired = { onlyMomRequired = !onlyMomRequired },
             onToggleOnlyMust = { onlyMust = !onlyMust },
             timeZone = timeZone,
             nowMillis = nowMillis,
             onSelectDay = { selectedDay ->
                 dateStateHolder.updateSelectedDateState(selectedDay)
             },
+            pendingConflictCount = conflicts.size,
+            onNavigateToSettings = onNavigateToSettings,
         )
     }
 }
@@ -139,13 +155,17 @@ private fun WeekPage(
     tasks: List<com.debanshu.xcalendar.domain.model.Task>,
     people: List<Person>,
     momId: String?,
-    onlyMom: Boolean,
+    lensSelection: FamilyLensSelection,
+    onlyMomRequired: Boolean,
     onlyMust: Boolean,
-    onToggleOnlyMom: () -> Unit,
+    onLensChange: (FamilyLensSelection) -> Unit,
+    onToggleOnlyMomRequired: () -> Unit,
     onToggleOnlyMust: () -> Unit,
     timeZone: TimeZone,
     nowMillis: Long,
     onSelectDay: (LocalDate) -> Unit,
+    pendingConflictCount: Int,
+    onNavigateToSettings: () -> Unit,
 ) {
     val weekDays = remember(weekStart) {
         (0 until DAYS_IN_WEEK).map { offset ->
@@ -153,9 +173,15 @@ private fun WeekPage(
         }
     }
 
-    val filter = remember(onlyMom, onlyMust, momId) {
+    val filter = remember(lensSelection, onlyMomRequired, onlyMust, momId) {
+        val selectedPersonId =
+            if (onlyMomRequired && momId != null) {
+                momId
+            } else {
+                lensSelection.effectivePersonId(momId)
+            }
         ScheduleFilter(
-            personId = if (onlyMom && momId != null) momId else null,
+            personId = selectedPersonId,
             onlyMust = onlyMust,
             includeUnassignedEvents = true,
             nowWindowMinutes = null,
@@ -191,11 +217,21 @@ private fun WeekPage(
         WeekHeader(
             weekStart = weekStart,
             weekEnd = weekStart.plus(DatePeriod(days = DAYS_IN_WEEK - 1)),
-            onlyMom = onlyMom,
+            lensSelection = lensSelection,
+            people = people,
+            onlyMomRequired = onlyMomRequired,
             onlyMust = onlyMust,
-            onToggleOnlyMom = onToggleOnlyMom,
+            onLensChange = onLensChange,
+            onToggleOnlyMomRequired = onToggleOnlyMomRequired,
             onToggleOnlyMust = onToggleOnlyMust,
         )
+
+        if (pendingConflictCount > 0) {
+            ConflictReviewBanner(
+                conflictCount = pendingConflictCount,
+                onOpenSettings = onNavigateToSettings,
+            )
+        }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -236,9 +272,12 @@ private fun WeekPage(
 private fun WeekHeader(
     weekStart: LocalDate,
     weekEnd: LocalDate,
-    onlyMom: Boolean,
+    lensSelection: FamilyLensSelection,
+    people: List<Person>,
+    onlyMomRequired: Boolean,
     onlyMust: Boolean,
-    onToggleOnlyMom: () -> Unit,
+    onLensChange: (FamilyLensSelection) -> Unit,
+    onToggleOnlyMomRequired: () -> Unit,
     onToggleOnlyMust: () -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -252,17 +291,70 @@ private fun WeekHeader(
             style = XCalendarTheme.typography.bodyLarge,
             color = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
+        FamilyLensMiniHeader(
+            selection = lensSelection,
+            people = people,
+            onSelectionChange = onLensChange,
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = onlyMom,
-                onClick = onToggleOnlyMom,
+                selected = onlyMomRequired,
+                onClick = onToggleOnlyMomRequired,
+                modifier =
+                    Modifier.semantics {
+                        contentDescription =
+                            if (onlyMomRequired) {
+                                "Only Mom required filter on"
+                            } else {
+                                "Only Mom required filter off"
+                            }
+                    },
                 label = { Text("Only Mom required") },
             )
             FilterChip(
                 selected = onlyMust,
                 onClick = onToggleOnlyMust,
+                modifier =
+                    Modifier.semantics {
+                        contentDescription =
+                            if (onlyMust) {
+                                "Only Must filter on"
+                            } else {
+                                "Only Must filter off"
+                            }
+                    },
                 label = { Text("Only Must") },
             )
+        }
+    }
+}
+
+@Composable
+private fun ConflictReviewBanner(
+    conflictCount: Int,
+    onOpenSettings: () -> Unit,
+) {
+    Card(shape = RoundedCornerShape(16.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Conflicts need review",
+                style = XCalendarTheme.typography.titleMedium,
+                color = XCalendarTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "$conflictCount sync conflict(s) are waiting in Settings.",
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(
+                onClick = onOpenSettings,
+                modifier = Modifier.semantics { contentDescription = "Open Settings to review sync conflicts" },
+            ) {
+                Text("Open Settings")
+            }
         }
     }
 }
@@ -308,7 +400,10 @@ private fun DayColumn(
         }
         val remaining = items.size - visibleItems.size
         if (remaining > 0) {
-            TextButton(onClick = onMoreClick) {
+            TextButton(
+                onClick = onMoreClick,
+                modifier = Modifier.semantics { contentDescription = "Open ${formatDateShort(date)} details" },
+            ) {
                 Text("+ $remaining")
             }
         }
@@ -321,6 +416,7 @@ private fun WeekItemCard(
     peopleById: Map<String, Person>,
 ) {
     val people = item.personIds.mapNotNull { peopleById[it] }
+    val whoAffectedLabel = people.joinToString(", ") { it.name }.ifBlank { null }
     val accentColor = resolveAccentColor(item, people, XCalendarTheme.colorScheme.primary)
 
     Card(shape = RoundedCornerShape(12.dp)) {
@@ -344,6 +440,15 @@ private fun WeekItemCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                whoAffectedLabel?.let { names ->
+                    Text(
+                        text = "Who's affected: $names",
+                        style = XCalendarTheme.typography.labelSmall,
+                        color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 if (item.priority != null) {
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant,

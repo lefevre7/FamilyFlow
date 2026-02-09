@@ -9,6 +9,7 @@ import com.debanshu.xcalendar.domain.auth.GoogleTokenStore
 import com.debanshu.xcalendar.domain.repository.IEventRepository
 import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
 import com.debanshu.xcalendar.domain.sync.SyncConflict
+import com.debanshu.xcalendar.domain.util.ImportCategoryClassifier
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import com.debanshu.xcalendar.domain.usecase.calendar.GetUserCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.calendarSource.GetAllCalendarSourcesUseCase
@@ -30,6 +31,7 @@ import kotlin.uuid.Uuid
 class SyncGoogleCalendarsUseCase(
     private val syncManager: CalendarSyncManager,
     private val getAllCalendarSourcesUseCase: GetAllCalendarSourcesUseCase,
+    private val getGoogleAccountByIdUseCase: GetGoogleAccountByIdUseCase,
     private val getUserCalendarsUseCase: GetUserCalendarsUseCase,
     private val getCurrentUserUseCase: GetCurrentUserUseCase,
     private val eventRepository: IEventRepository,
@@ -52,6 +54,8 @@ class SyncGoogleCalendarsUseCase(
         sources.forEach { source ->
             if (tokenStore.getTokens(source.providerAccountId) == null) return@forEach
             val calendar = calendars.firstOrNull { it.id == source.calendarId } ?: return@forEach
+            val linkedAccount = getGoogleAccountByIdUseCase(source.providerAccountId)
+            val defaultPersonId = linkedAccount?.personId
             val remoteEvents =
                 syncManager.listEvents(
                     accountId = source.providerAccountId,
@@ -92,7 +96,7 @@ class SyncGoogleCalendarsUseCase(
                     return@forEach
                 }
                 if (local == null) {
-                    val created = remote.toLocalEvent(calendar, now)
+                    val created = remote.toLocalEvent(calendar, now, defaultPersonId)
                     eventRepository.addEvent(created)
                     return@forEach
                 }
@@ -154,13 +158,15 @@ class SyncGoogleCalendarsUseCase(
     private fun ExternalEvent.toLocalEvent(
         calendar: Calendar,
         syncedAt: Long,
+        personId: String?,
     ): Event {
+        val category = ImportCategoryClassifier.classify(summary, description)
         return Event(
             id = Uuid.random().toString(),
             calendarId = calendar.id,
             calendarName = calendar.name,
             title = summary,
-            description = description,
+            description = ImportCategoryClassifier.applyCategory(description, category),
             location = location,
             startTime = startTime,
             endTime = endTime,
@@ -173,6 +179,7 @@ class SyncGoogleCalendarsUseCase(
             externalId = id,
             externalUpdatedAt = updatedAt,
             lastSyncedAt = syncedAt,
+            affectedPersonIds = personId?.let { listOf(it) } ?: emptyList(),
         )
     }
 
@@ -181,10 +188,11 @@ class SyncGoogleCalendarsUseCase(
         calendar: Calendar,
         syncedAt: Long,
     ): Event {
+        val category = ImportCategoryClassifier.classify(summary, description)
         return local.copy(
             calendarName = calendar.name,
             title = summary,
-            description = description,
+            description = ImportCategoryClassifier.applyCategory(description, category),
             location = location,
             startTime = startTime,
             endTime = endTime,

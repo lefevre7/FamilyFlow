@@ -132,6 +132,25 @@ fun SettingsScreen(
             },
         )
 
+        AccessibilitySection(
+            preferences = reminderPreferences,
+            onReducedMotionToggle = { enabled ->
+                scope.launch {
+                    updateReminderPreferencesUseCase.setReducedMotionEnabled(enabled)
+                }
+            },
+            onHighContrastToggle = { enabled ->
+                scope.launch {
+                    updateReminderPreferencesUseCase.setHighContrastEnabled(enabled)
+                }
+            },
+            onTextScaleSelect = { scale ->
+                scope.launch {
+                    updateReminderPreferencesUseCase.setTextScale(scale)
+                }
+            },
+        )
+
         OfflineAiSection(
             modelStatus = modelStatus,
             downloadProgress = downloadProgress,
@@ -317,6 +336,60 @@ private fun ReminderSection(
                     checked = preferences.summaryEnabled,
                     onCheckedChange = onSummaryToggle,
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccessibilitySection(
+    preferences: ReminderPreferences,
+    onReducedMotionToggle: (Boolean) -> Unit,
+    onHighContrastToggle: (Boolean) -> Unit,
+    onTextScaleSelect: (Float) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "Accessibility",
+            style = XCalendarTheme.typography.titleLarge,
+            color = XCalendarTheme.colorScheme.onSurface,
+        )
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ToggleRow(
+                    label = "Reduced motion (recommended)",
+                    checked = preferences.reducedMotionEnabled,
+                    onCheckedChange = onReducedMotionToggle,
+                )
+                ToggleRow(
+                    label = "High contrast",
+                    checked = preferences.highContrastEnabled,
+                    onCheckedChange = onHighContrastToggle,
+                )
+                Text(
+                    text = "Text size",
+                    style = XCalendarTheme.typography.bodyMedium,
+                    color = XCalendarTheme.colorScheme.onSurface,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    val options = listOf(0.95f to "S", 1.0f to "M", 1.1f to "L", 1.2f to "XL")
+                    options.forEach { (scale, label) ->
+                        TextButton(onClick = { onTextScaleSelect(scale) }) {
+                            Text(
+                                text = label,
+                                color =
+                                    if (kotlin.math.abs(preferences.textScale - scale) < 0.01f) {
+                                        XCalendarTheme.colorScheme.primary
+                                    } else {
+                                        XCalendarTheme.colorScheme.onSurfaceVariant
+                                    },
+                            )
+                        }
+                    }
+                }
             }
         }
     }

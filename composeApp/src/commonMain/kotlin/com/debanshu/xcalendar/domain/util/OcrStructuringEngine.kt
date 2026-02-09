@@ -2,6 +2,7 @@ package com.debanshu.xcalendar.domain.util
 
 import com.debanshu.xcalendar.domain.model.OcrCandidateEvent
 import com.debanshu.xcalendar.domain.model.OcrStructuredResult
+import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
@@ -168,6 +169,27 @@ object OcrStructuringEngine {
         return LocalTime(hour, minute)
     }
 
+    internal fun inferRecurringRule(
+        text: String,
+        date: LocalDate? = null,
+    ): String? {
+        val normalized = text.lowercase()
+        if (normalized.isBlank()) return null
+        if (DAILY_PATTERN.containsMatchIn(normalized)) return "FREQ=DAILY"
+        if (MONTHLY_PATTERN.containsMatchIn(normalized)) return "FREQ=MONTHLY"
+        if (YEARLY_PATTERN.containsMatchIn(normalized)) return "FREQ=YEARLY"
+
+        val matchedDay =
+            WEEKDAY_BYDAY.entries.firstOrNull { entry ->
+                Regex("\\b${entry.key}\\b", RegexOption.IGNORE_CASE).containsMatchIn(normalized)
+            }?.value
+        if (WEEKLY_PATTERN.containsMatchIn(normalized) || matchedDay != null) {
+            val byDay = matchedDay ?: date?.dayOfWeek?.toByDayToken()
+            return if (byDay != null) "FREQ=WEEKLY;BYDAY=$byDay" else "FREQ=WEEKLY"
+        }
+        return null
+    }
+
     private fun monthNameToNumber(value: String): Int? {
         return when (value.lowercase().take(3)) {
             "jan" -> 1
@@ -191,6 +213,45 @@ object OcrStructuringEngine {
     private val TIME_RANGE_REGEX = Regex("(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?)\\s*[-–]\\s*(\\d{1,2}(?::\\d{2})?\\s*(?:am|pm)?)", RegexOption.IGNORE_CASE)
     private val TIME_REGEX = Regex("(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?", RegexOption.IGNORE_CASE)
     private val MULTI_SPACE_REGEX = Regex("\\s{2,}")
+    private val DAILY_PATTERN = Regex("\\b(daily|every day|each day|weekday[s]?)\\b", RegexOption.IGNORE_CASE)
+    private val WEEKLY_PATTERN = Regex("\\b(weekly|every week|each week)\\b", RegexOption.IGNORE_CASE)
+    private val MONTHLY_PATTERN = Regex("\\b(monthly|every month|each month)\\b", RegexOption.IGNORE_CASE)
+    private val YEARLY_PATTERN = Regex("\\b(yearly|annual|annually|every year|each year)\\b", RegexOption.IGNORE_CASE)
+    private val WEEKDAY_BYDAY =
+        linkedMapOf(
+            "monday" to "MO",
+            "mondays" to "MO",
+            "mon" to "MO",
+            "tuesday" to "TU",
+            "tuesdays" to "TU",
+            "tue" to "TU",
+            "wednesday" to "WE",
+            "wednesdays" to "WE",
+            "wed" to "WE",
+            "thursday" to "TH",
+            "thursdays" to "TH",
+            "thu" to "TH",
+            "friday" to "FR",
+            "fridays" to "FR",
+            "fri" to "FR",
+            "saturday" to "SA",
+            "saturdays" to "SA",
+            "sat" to "SA",
+            "sunday" to "SU",
+            "sundays" to "SU",
+            "sun" to "SU",
+        )
+
+    private fun DayOfWeek.toByDayToken(): String =
+        when (this) {
+            DayOfWeek.MONDAY -> "MO"
+            DayOfWeek.TUESDAY -> "TU"
+            DayOfWeek.WEDNESDAY -> "WE"
+            DayOfWeek.THURSDAY -> "TH"
+            DayOfWeek.FRIDAY -> "FR"
+            DayOfWeek.SATURDAY -> "SA"
+            DayOfWeek.SUNDAY -> "SU"
+        }
 }
 
 @Serializable

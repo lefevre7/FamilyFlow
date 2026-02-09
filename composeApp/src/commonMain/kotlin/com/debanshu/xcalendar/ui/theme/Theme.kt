@@ -17,6 +17,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
 private val CalmLightColors =
     lightColorScheme(
         primary = Color(0xFF4C7D73),
@@ -73,10 +74,67 @@ private val CalmDarkColors =
         onErrorContainer = Color(0xFFF4D9D6),
     )
 
+private val HighContrastLightColors =
+    lightColorScheme(
+        primary = Color(0xFF1C5A52),
+        onPrimary = Color(0xFFFFFFFF),
+        primaryContainer = Color(0xFFC7E3DD),
+        onPrimaryContainer = Color(0xFF001F1C),
+        secondary = Color(0xFF2F4F77),
+        onSecondary = Color(0xFFFFFFFF),
+        secondaryContainer = Color(0xFFDCE4F3),
+        onSecondaryContainer = Color(0xFF0D1B33),
+        tertiary = Color(0xFF885A48),
+        onTertiary = Color(0xFFFFFFFF),
+        tertiaryContainer = Color(0xFFF1DED5),
+        onTertiaryContainer = Color(0xFF2B140D),
+        background = Color(0xFFFCFBF8),
+        onBackground = Color(0xFF11100F),
+        surface = Color(0xFFFFFFFF),
+        onSurface = Color(0xFF11100F),
+        surfaceVariant = Color(0xFFE5E0D8),
+        onSurfaceVariant = Color(0xFF2D2925),
+        outline = Color(0xFF5B534C),
+        outlineVariant = Color(0xFFBEB7AF),
+        error = Color(0xFFA2241B),
+        onError = Color(0xFFFFFFFF),
+        errorContainer = Color(0xFFF6D9D6),
+        onErrorContainer = Color(0xFF2E0402),
+    )
+
+private val HighContrastDarkColors =
+    darkColorScheme(
+        primary = Color(0xFF95CCC0),
+        onPrimary = Color(0xFF002A25),
+        primaryContainer = Color(0xFF2A5A52),
+        onPrimaryContainer = Color(0xFFE0F3EE),
+        secondary = Color(0xFFB7C7E6),
+        onSecondary = Color(0xFF0C1C35),
+        secondaryContainer = Color(0xFF3E4F6D),
+        onSecondaryContainer = Color(0xFFE7ECF7),
+        tertiary = Color(0xFFE2B6A9),
+        onTertiary = Color(0xFF321C14),
+        tertiaryContainer = Color(0xFF68493E),
+        onTertiaryContainer = Color(0xFFF6E7E1),
+        background = Color(0xFF0E0D0C),
+        onBackground = Color(0xFFF5F2EE),
+        surface = Color(0xFF11100F),
+        onSurface = Color(0xFFF5F2EE),
+        surfaceVariant = Color(0xFF3A3530),
+        onSurfaceVariant = Color(0xFFE0D9D2),
+        outline = Color(0xFFA29A92),
+        outlineVariant = Color(0xFF57514A),
+        error = Color(0xFFFFB4AB),
+        onError = Color(0xFF690C06),
+        errorContainer = Color(0xFF8C1D14),
+        onErrorContainer = Color(0xFFFFDAD5),
+    )
+
 val LocalSharedTransitionScope =
     compositionLocalOf<SharedTransitionScope> {
         throw IllegalStateException("No SharedTransitionScope provided")
     }
+private val LocalReducedMotionEnabled = compositionLocalOf { true }
 
 /**
  * Main theme composable for the XCalendar app
@@ -87,16 +145,26 @@ val LocalSharedTransitionScope =
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun XCalendarTheme(
-    shapes: Shapes = XCalendarTheme.shapes,
-    typography: Typography = XCalendarTheme.typography,
+    shapes: Shapes = AppShapes,
+    typography: Typography = com.debanshu.xcalendar.ui.theme.Typography,
     useDarkTheme: Boolean = isSystemInDarkTheme(),
+    highContrastEnabled: Boolean = false,
+    reducedMotionEnabled: Boolean = true,
+    textScale: Float = 1.0f,
     content: @Composable () -> Unit,
 ) {
-    val colorScheme = if (useDarkTheme) CalmDarkColors else CalmLightColors
-    CompositionLocalProvider {
+    val colorScheme =
+        when {
+            useDarkTheme && highContrastEnabled -> HighContrastDarkColors
+            useDarkTheme -> CalmDarkColors
+            highContrastEnabled -> HighContrastLightColors
+            else -> CalmLightColors
+        }
+    val scaledTypography = typography.scaleBy(textScale.coerceIn(0.9f, 1.3f))
+    CompositionLocalProvider(LocalReducedMotionEnabled provides reducedMotionEnabled) {
         MaterialExpressiveTheme(
             colorScheme = colorScheme,
-            typography = typography,
+            typography = scaledTypography,
             shapes = shapes,
             content = {
                 SharedTransitionLayout {
@@ -121,7 +189,7 @@ object XCalendarTheme {
 
     val typography: Typography
         @Composable @ReadOnlyComposable
-        get() = Typography
+        get() = MaterialTheme.typography
 
     val shapes: Shapes
         @Composable @ReadOnlyComposable
@@ -131,4 +199,33 @@ object XCalendarTheme {
     val motion: MotionScheme
         @Composable @ReadOnlyComposable
         get() = MaterialTheme.motionScheme
+
+    val reducedMotionEnabled: Boolean
+        @Composable @ReadOnlyComposable
+        get() = LocalReducedMotionEnabled.current
 }
+
+private fun Typography.scaleBy(scale: Float): Typography =
+    copy(
+        displayLarge = displayLarge.scaleBy(scale),
+        displayMedium = displayMedium.scaleBy(scale),
+        displaySmall = displaySmall.scaleBy(scale),
+        headlineLarge = headlineLarge.scaleBy(scale),
+        headlineMedium = headlineMedium.scaleBy(scale),
+        headlineSmall = headlineSmall.scaleBy(scale),
+        titleLarge = titleLarge.scaleBy(scale),
+        titleMedium = titleMedium.scaleBy(scale),
+        titleSmall = titleSmall.scaleBy(scale),
+        bodyLarge = bodyLarge.scaleBy(scale),
+        bodyMedium = bodyMedium.scaleBy(scale),
+        bodySmall = bodySmall.scaleBy(scale),
+        labelLarge = labelLarge.scaleBy(scale),
+        labelMedium = labelMedium.scaleBy(scale),
+        labelSmall = labelSmall.scaleBy(scale),
+    )
+
+private fun TextStyle.scaleBy(scale: Float): TextStyle =
+    copy(
+        fontSize = fontSize * scale,
+        lineHeight = lineHeight * scale,
+    )

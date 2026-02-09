@@ -47,4 +47,16 @@ class ReminderPreferencesRepository : IReminderPreferencesRepository {
             )
         }
     }
+
+    override suspend fun setReducedMotionEnabled(enabled: Boolean) {
+        state.update { it.copy(reducedMotionEnabled = enabled) }
+    }
+
+    override suspend fun setHighContrastEnabled(enabled: Boolean) {
+        state.update { it.copy(highContrastEnabled = enabled) }
+    }
+
+    override suspend fun setTextScale(scale: Float) {
+        state.update { it.copy(textScale = scale.coerceIn(0.9f, 1.3f)) }
+    }
 }

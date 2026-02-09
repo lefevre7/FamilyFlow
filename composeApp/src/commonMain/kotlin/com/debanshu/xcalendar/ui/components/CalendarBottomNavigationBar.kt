@@ -51,6 +51,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -302,12 +304,20 @@ internal fun CalendarBottomNavigationBar(
     selectedView: NavigableScreen,
     onViewSelect: (NavigableScreen) -> Unit,
     onAddClick: () -> Unit,
-    onAddLongPress: () -> Unit = {},
+    onAddTaskShortcut: (() -> Unit)? = null,
+    onAddEventShortcut: (() -> Unit)? = null,
+    onAddVoiceShortcut: (() -> Unit)? = null,
 ) {
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val coroutineScope = rememberCoroutineScope()
     val state = rememberNavBarState()
     val currentOnViewSelect by rememberUpdatedState(onViewSelect)
+    val reducedMotionEnabled = XCalendarTheme.reducedMotionEnabled
+    val currentOnAddClick by rememberUpdatedState(onAddClick)
+    val currentOnAddTaskShortcut by rememberUpdatedState(onAddTaskShortcut)
+    val currentOnAddEventShortcut by rememberUpdatedState(onAddEventShortcut)
+    val currentOnAddVoiceShortcut by rememberUpdatedState(onAddVoiceShortcut)
+    var showAddShortcuts by remember { mutableStateOf(false) }
 
     val navItems =
         remember {
@@ -337,7 +347,10 @@ internal fun CalendarBottomNavigationBar(
         state.indicatorWidthPx.value = metrics.width
         val targetPos = metrics.left
 
-        if (state.indicatorInitialized.value && abs(state.indicatorOffset.value - targetPos) >= 0.5f) {
+        if (reducedMotionEnabled) {
+            state.indicatorOffset.snapTo(targetPos)
+            state.indicatorInitialized.value = true
+        } else if (state.indicatorInitialized.value && abs(state.indicatorOffset.value - targetPos) >= 0.5f) {
             state.indicatorOffset.animateTo(targetPos, NavBarAnimationSpecs.indicatorSpring)
         } else {
             state.indicatorOffset.snapTo(targetPos)
@@ -347,6 +360,12 @@ internal fun CalendarBottomNavigationBar(
 
     // Effect 2: Handle scale animations based on phase
     LaunchedEffect(state.phase.value) {
+        if (reducedMotionEnabled) {
+            state.indicatorScale.snapTo(1f)
+            state.boxScale.snapTo(1f)
+            state.phase.value = AnimationPhase.Idle
+            return@LaunchedEffect
+        }
         when (val phase = state.phase.value) {
             AnimationPhase.Dragging, AnimationPhase.ClickAnimating -> {
                 launch { state.indicatorScale.animateTo(1.25f, NavBarAnimationSpecs.indicatorSpring) }
@@ -425,8 +444,10 @@ internal fun CalendarBottomNavigationBar(
                                 if (index != selectedIndex && state.phase.value == AnimationPhase.Idle) {
                                     // Fire selection immediately for responsive feel
                                     currentOnViewSelect(navItem.screen)
-                                    coroutineScope.launch {
-                                        state.animateClickTransition(index)
+                                    if (!reducedMotionEnabled) {
+                                        coroutineScope.launch {
+                                            state.animateClickTransition(index)
+                                        }
                                     }
                                 }
                             },
@@ -440,21 +461,66 @@ internal fun CalendarBottomNavigationBar(
             Spacer(modifier = Modifier.width(12.dp))
 
             Box(
-                modifier =
-                    Modifier.combinedClickable(
-                        onClick = onAddClick,
-                        onLongClick = onAddLongPress,
-                    ),
+                contentAlignment = Alignment.BottomCenter,
             ) {
+                if (showAddShortcuts) {
+                    Column(
+                        modifier = Modifier.padding(bottom = 72.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        AddShortcutFab(
+                            label = "Task",
+                            contentDescription = "Quick add task",
+                            onClick = {
+                                showAddShortcuts = false
+                                (currentOnAddTaskShortcut ?: currentOnAddClick).invoke()
+                            },
+                        )
+                        AddShortcutFab(
+                            label = "Event",
+                            contentDescription = "Quick add event",
+                            onClick = {
+                                showAddShortcuts = false
+                                (currentOnAddEventShortcut ?: currentOnAddClick).invoke()
+                            },
+                        )
+                        AddShortcutFab(
+                            label = "Voice",
+                            contentDescription = "Quick voice capture",
+                            onClick = {
+                                showAddShortcuts = false
+                                (currentOnAddVoiceShortcut ?: currentOnAddClick).invoke()
+                            },
+                        )
+                    }
+                }
+
                 FloatingActionButton(
-                    onClick = {},
+                    onClick = {
+                        showAddShortcuts = false
+                        currentOnAddClick()
+                    },
+                    modifier =
+                        Modifier
+                            .size(56.dp)
+                            .combinedClickable(
+                                onClick = {
+                                    showAddShortcuts = false
+                                    currentOnAddClick()
+                                },
+                                onLongClick = { showAddShortcuts = !showAddShortcuts },
+                            ).semantics {
+                                contentDescription =
+                                    "Quick add task. Long press for task, event, and voice shortcuts."
+                            },
                     shape = CircleShape,
                     containerColor = XCalendarTheme.colorScheme.primary,
                     contentColor = XCalendarTheme.colorScheme.onPrimary,
                 ) {
                     Icon(
                         painter = painterResource(Res.drawable.ic_add),
-                        contentDescription = "Add Event",
+                        contentDescription = null,
                     )
                 }
             }
@@ -472,6 +538,30 @@ private data class ItemMetrics(
     val left: Float,
     val width: Float,
 )
+
+@Composable
+private fun AddShortcutFab(
+    label: String,
+    contentDescription: String,
+    onClick: () -> Unit,
+) {
+    FloatingActionButton(
+        onClick = onClick,
+        modifier =
+            Modifier
+                .size(56.dp)
+                .semantics { this.contentDescription = contentDescription },
+        shape = CircleShape,
+        containerColor = XCalendarTheme.colorScheme.secondaryContainer,
+        contentColor = XCalendarTheme.colorScheme.onSecondaryContainer,
+    ) {
+        Text(
+            text = label,
+            style = XCalendarTheme.typography.labelMedium,
+            maxLines = 1,
+        )
+    }
+}
 
 @Composable
 private fun RowScope.BottomNavItem(

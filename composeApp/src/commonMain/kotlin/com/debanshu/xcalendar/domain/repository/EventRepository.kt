@@ -8,6 +8,7 @@ import com.debanshu.xcalendar.data.store.EventKey
 import com.debanshu.xcalendar.data.store.SingleEventKey
 import com.debanshu.xcalendar.domain.model.Event
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -39,6 +40,7 @@ class EventRepository(
     @Named("eventStore") private val eventStore: MutableStore<EventKey, List<Event>>,
     @Named("singleEventStore") private val singleEventStore: MutableStore<SingleEventKey, Event>,
     private val eventDao: EventDao,
+    private val eventPeopleRepository: IEventPeopleRepository,
 ) : BaseRepository(),
     IEventRepository {
     /**
@@ -86,7 +88,17 @@ class EventRepository(
                 eventStore
                     .stream<Unit>(StoreReadRequest.cached(key, refresh = false))
                     .filterIsInstance<StoreReadResponse.Data<List<Event>>>()
-                    .map { it.value },
+                    .map { it.value }
+                    .combine(eventPeopleRepository.mappings) { events, mappings ->
+                        events.map { event ->
+                            val mappedPeople = mappings[event.id] ?: return@map event
+                            if (mappedPeople == event.affectedPersonIds) {
+                                event
+                            } else {
+                                event.copy(affectedPersonIds = mappedPeople)
+                            }
+                        }
+                    },
         )
     }
 
@@ -103,6 +115,7 @@ class EventRepository(
         safeCallOrThrow("addEvent(${event.id})") {
             val key = SingleEventKey(event.id)
             singleEventStore.write(StoreWriteRequest.of(key, event))
+            eventPeopleRepository.setPeopleForEvent(event.id, event.affectedPersonIds)
         }
 
     /**
@@ -118,6 +131,7 @@ class EventRepository(
         safeCallOrThrow("updateEvent(${event.id})") {
             val key = SingleEventKey(event.id)
             singleEventStore.write(StoreWriteRequest.of(key, event))
+            eventPeopleRepository.setPeopleForEvent(event.id, event.affectedPersonIds)
         }
 
     /**
@@ -141,5 +155,6 @@ class EventRepository(
             // Clear from Store cache to prevent stale data
             val key = SingleEventKey(event.id)
             singleEventStore.clear(key)
+            eventPeopleRepository.removeEvent(event.id)
         }
 }

@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +23,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -37,21 +37,27 @@ import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.model.Calendar
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.OcrCandidateEvent
+import com.debanshu.xcalendar.domain.model.Person
+import com.debanshu.xcalendar.domain.model.PersonRole
+import com.debanshu.xcalendar.domain.util.ImportCategory
+import com.debanshu.xcalendar.domain.util.ImportCategoryClassifier
 import com.debanshu.xcalendar.domain.util.OcrStructuringEngine
 import com.debanshu.xcalendar.domain.usecase.event.CreateEventUseCase
 import com.debanshu.xcalendar.domain.usecase.ocr.StructureOcrUseCase
+import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.platform.PlatformFeatures
 import com.debanshu.xcalendar.platform.rememberOcrCaptureController
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import kotlinx.coroutines.launch
+import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
-import kotlinx.datetime.atTime
-import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.plus
+import kotlinx.datetime.atTime
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.number
 import org.koin.compose.koinInject
 import kotlin.time.Clock
 import kotlin.uuid.ExperimentalUuidApi
@@ -70,7 +76,10 @@ fun OcrImportSheet(
     val referenceDate = remember { Clock.System.now().toLocalDateTime(timeZone).date }
     val createEventUseCase = koinInject<CreateEventUseCase>()
     val structureOcrUseCase = koinInject<StructureOcrUseCase>()
+    val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val scope = rememberCoroutineScope()
+    val people by remember { getPeopleUseCase() }.collectAsState(initial = emptyList())
+    val defaultPersonId = remember(people) { people.firstOrNull { it.role == PersonRole.MOM }?.id ?: people.firstOrNull()?.id }
 
     var rawText by rememberSaveable { mutableStateOf("") }
     var statusMessage by rememberSaveable { mutableStateOf<String?>(null) }
@@ -90,13 +99,21 @@ fun OcrImportSheet(
         },
     )
 
-    LaunchedEffect(rawText) {
+    LaunchedEffect(rawText, defaultPersonId) {
         if (rawText.isBlank()) return@LaunchedEffect
         isStructuring = true
         statusMessage = null
         val structured = structureOcrUseCase(rawText, referenceDate, timeZone)
+        val titleCounts = structured.candidates.groupingBy { normalizeCandidateTitle(it.title) }.eachCount()
         editableCandidates.clear()
-        editableCandidates.addAll(structured.candidates.map { it.toEditable() })
+        editableCandidates.addAll(
+            structured.candidates.map { candidate ->
+                candidate.toEditable(
+                    defaultPersonId = defaultPersonId,
+                    repeatedTitleCount = titleCounts[normalizeCandidateTitle(candidate.title)] ?: 0,
+                )
+            },
+        )
         isStructuring = false
     }
 
@@ -168,22 +185,27 @@ fun OcrImportSheet(
             }
 
             if (editableCandidates.isNotEmpty()) {
+                val pendingCount = editableCandidates.count { it.decision == CandidateDecision.PENDING }
+                val acceptedCount = editableCandidates.count { it.decision == CandidateDecision.ACCEPTED }
                 Text(
                     text = "Review events",
                     style = XCalendarTheme.typography.titleMedium,
                     color = XCalendarTheme.colorScheme.onSurface,
                 )
+                Text(
+                    text = "$acceptedCount accepted • $pendingCount pending",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
                 editableCandidates.forEach { candidate ->
                     OcrCandidateCard(
                         candidate = candidate,
+                        people = people,
                         onUpdate = { updated ->
                             val index = editableCandidates.indexOfFirst { it.id == updated.id }
                             if (index >= 0) {
                                 editableCandidates[index] = updated
                             }
-                        },
-                        onRemove = {
-                            editableCandidates.removeAll { it.id == candidate.id }
                         },
                     )
                 }
@@ -196,10 +218,19 @@ fun OcrImportSheet(
                                 statusMessage = "Choose a calendar first."
                                 return@TextButton
                             }
+                            if (pendingCount > 0) {
+                                statusMessage = "Review each candidate: Accept or Discard."
+                                return@TextButton
+                            }
+                            val accepted = editableCandidates.filter { it.decision == CandidateDecision.ACCEPTED }
+                            if (accepted.isEmpty()) {
+                                statusMessage = "Accept at least one event to import."
+                                return@TextButton
+                            }
                             scope.launch {
                                 val errors = saveCandidates(
                                     calendar = calendar,
-                                    candidates = editableCandidates.filter { it.include },
+                                    candidates = accepted,
                                     referenceDate = referenceDate,
                                     timeZone = timeZone,
                                     createEventUseCase = createEventUseCase,
@@ -210,7 +241,7 @@ fun OcrImportSheet(
                                 }
                             }
                         },
-                        enabled = editableCandidates.any { it.include },
+                        enabled = acceptedCount > 0 && pendingCount == 0,
                     ) {
                         Text("Add events")
                     }
@@ -276,53 +307,225 @@ private fun RawTextCard(text: String) {
 @Composable
 private fun OcrCandidateCard(
     candidate: EditableCandidate,
+    people: List<Person>,
     onUpdate: (EditableCandidate) -> Unit,
-    onRemove: () -> Unit,
 ) {
+    val editingEnabled = candidate.decision != CandidateDecision.DISCARDED && candidate.isEditing
     Card(shape = RoundedCornerShape(16.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TagChip(label = candidate.decision.label())
+                TagChip(label = "Category: ${candidate.category.label}")
+            }
             OutlinedTextField(
                 value = candidate.title,
-                onValueChange = { onUpdate(candidate.copy(title = it)) },
+                onValueChange = {
+                    onUpdate(
+                        candidate.copy(
+                            title = it,
+                            decision = CandidateDecision.PENDING,
+                            isEditing = true,
+                        ),
+                    )
+                },
                 label = { Text("Title") },
                 modifier = Modifier.fillMaxWidth(),
+                enabled = editingEnabled,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = candidate.dateText,
-                    onValueChange = { onUpdate(candidate.copy(dateText = it)) },
+                    onValueChange = {
+                        onUpdate(
+                            candidate.copy(
+                                dateText = it,
+                                decision = CandidateDecision.PENDING,
+                                isEditing = true,
+                            ),
+                        )
+                    },
                     label = { Text("Date (MM/DD)") },
                     modifier = Modifier.weight(1f),
+                    enabled = editingEnabled,
                 )
                 OutlinedTextField(
                     value = candidate.startTimeText,
-                    onValueChange = { onUpdate(candidate.copy(startTimeText = it)) },
+                    onValueChange = {
+                        onUpdate(
+                            candidate.copy(
+                                startTimeText = it,
+                                decision = CandidateDecision.PENDING,
+                                isEditing = true,
+                            ),
+                        )
+                    },
                     label = { Text("Start") },
                     modifier = Modifier.weight(1f),
+                    enabled = editingEnabled,
                 )
                 OutlinedTextField(
                     value = candidate.endTimeText,
-                    onValueChange = { onUpdate(candidate.copy(endTimeText = it)) },
+                    onValueChange = {
+                        onUpdate(
+                            candidate.copy(
+                                endTimeText = it,
+                                decision = CandidateDecision.PENDING,
+                                isEditing = true,
+                            ),
+                        )
+                    },
                     label = { Text("End") },
                     modifier = Modifier.weight(1f),
+                    enabled = editingEnabled,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(
                     selected = candidate.allDay,
-                    onClick = { onUpdate(candidate.copy(allDay = !candidate.allDay)) },
+                    onClick = {
+                        onUpdate(
+                            candidate.copy(
+                                allDay = !candidate.allDay,
+                                decision = CandidateDecision.PENDING,
+                                isEditing = true,
+                            ),
+                        )
+                    },
                     label = { Text("All day") },
+                    enabled = editingEnabled,
                 )
-                FilterChip(
-                    selected = candidate.include,
-                    onClick = { onUpdate(candidate.copy(include = !candidate.include)) },
-                    label = { Text(if (candidate.include) "Included" else "Excluded") },
+                Text(
+                    text = "Source: ${candidate.sourceText.take(60)}",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                TextButton(onClick = onRemove) { Text("Remove") }
+            }
+            Text(
+                text = "Category",
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ImportCategory.entries.forEach { category ->
+                    FilterChip(
+                        selected = candidate.category == category,
+                        onClick = {
+                            onUpdate(
+                                candidate.copy(
+                                    category = category,
+                                    decision = CandidateDecision.PENDING,
+                                    isEditing = true,
+                                ),
+                            )
+                        },
+                        label = { Text(category.label) },
+                        enabled = editingEnabled,
+                    )
+                }
+            }
+            if (people.isNotEmpty()) {
+                Text(
+                    text = "Who's affected",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = candidate.selectedPersonId == null,
+                        onClick = {
+                            onUpdate(
+                                candidate.copy(
+                                    selectedPersonId = null,
+                                    decision = CandidateDecision.PENDING,
+                                    isEditing = true,
+                                ),
+                            )
+                        },
+                        label = { Text("Unassigned") },
+                        enabled = editingEnabled,
+                    )
+                    people.forEach { person ->
+                        FilterChip(
+                            selected = candidate.selectedPersonId == person.id,
+                            onClick = {
+                                onUpdate(
+                                    candidate.copy(
+                                        selectedPersonId = person.id,
+                                        decision = CandidateDecision.PENDING,
+                                        isEditing = true,
+                                    ),
+                                )
+                            },
+                            label = { Text(person.name) },
+                            enabled = editingEnabled,
+                        )
+                    }
+                }
+            }
+            candidate.suggestedRecurringRule?.let {
+                Text(
+                    text = "Add as recurring?",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = candidate.addAsRecurring,
+                        onClick = {
+                            onUpdate(
+                                candidate.copy(
+                                    addAsRecurring = true,
+                                    decision = CandidateDecision.PENDING,
+                                    isEditing = true,
+                                ),
+                            )
+                        },
+                        label = { Text("Yes") },
+                        enabled = editingEnabled,
+                    )
+                    FilterChip(
+                        selected = !candidate.addAsRecurring,
+                        onClick = {
+                            onUpdate(
+                                candidate.copy(
+                                    addAsRecurring = false,
+                                    decision = CandidateDecision.PENDING,
+                                    isEditing = true,
+                                ),
+                            )
+                        },
+                        label = { Text("No") },
+                        enabled = editingEnabled,
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = {
+                        onUpdate(candidate.copy(decision = CandidateDecision.ACCEPTED, isEditing = false))
+                    },
+                ) {
+                    Text("Accept")
+                }
+                TextButton(
+                    onClick = {
+                        onUpdate(candidate.copy(decision = CandidateDecision.PENDING, isEditing = true))
+                    },
+                ) {
+                    Text("Edit")
+                }
+                TextButton(
+                    onClick = {
+                        onUpdate(candidate.copy(decision = CandidateDecision.DISCARDED, isEditing = false))
+                    },
+                ) {
+                    Text("Discard")
+                }
             }
         }
     }
@@ -364,6 +567,12 @@ private suspend fun saveCandidates(
     }
 }
 
+private enum class CandidateDecision {
+    PENDING,
+    ACCEPTED,
+    DISCARDED,
+}
+
 private data class EditableCandidate(
     val id: String,
     val title: String,
@@ -371,21 +580,40 @@ private data class EditableCandidate(
     val startTimeText: String,
     val endTimeText: String,
     val allDay: Boolean,
-    val include: Boolean,
+    val category: ImportCategory,
+    val selectedPersonId: String?,
+    val suggestedRecurringRule: String?,
+    val addAsRecurring: Boolean,
+    val decision: CandidateDecision,
+    val isEditing: Boolean,
     val sourceText: String,
 )
 
-private fun OcrCandidateEvent.toEditable(): EditableCandidate =
-    EditableCandidate(
+private fun OcrCandidateEvent.toEditable(
+    defaultPersonId: String?,
+    repeatedTitleCount: Int,
+): EditableCandidate {
+    val detectedCategory = ImportCategoryClassifier.classify(title, sourceText)
+    val recurringRule =
+        OcrStructuringEngine.inferRecurringRule(sourceText, startDate)
+            ?: OcrStructuringEngine.inferRecurringRule(title, startDate)
+            ?: if (repeatedTitleCount > 1) "FREQ=WEEKLY" else null
+    return EditableCandidate(
         id = id,
         title = title,
-        dateText = startDate?.let { "${it.monthNumber}/${it.day}" } ?: "",
+        dateText = startDate?.let { "${it.month.number}/${it.day}" } ?: "",
         startTimeText = startTime?.let { it.toString() } ?: "",
         endTimeText = endTime?.let { it.toString() } ?: "",
         allDay = allDay,
-        include = true,
+        category = if (detectedCategory == ImportCategory.OTHER) ImportCategory.SCHOOL else detectedCategory,
+        selectedPersonId = defaultPersonId,
+        suggestedRecurringRule = recurringRule,
+        addAsRecurring = recurringRule != null,
+        decision = CandidateDecision.PENDING,
+        isEditing = true,
         sourceText = sourceText,
     )
+}
 
 @OptIn(ExperimentalUuidApi::class)
 private fun EditableCandidate.toEvent(
@@ -416,15 +644,16 @@ private fun EditableCandidate.toEvent(
         calendarId = calendar.id,
         calendarName = calendar.name,
         title = titleValue,
-        description = "OCR import: ${sourceText.take(120)}",
+        description = ImportCategoryClassifier.applyCategory("OCR import: ${sourceText.take(120)}", category),
         location = null,
         startTime = startMillis,
         endTime = endMillis,
         isAllDay = allDay,
-        isRecurring = false,
-        recurringRule = null,
+        isRecurring = addAsRecurring && !suggestedRecurringRule.isNullOrBlank(),
+        recurringRule = if (addAsRecurring) suggestedRecurringRule else null,
         reminderMinutes = emptyList(),
         color = calendar.color,
+        affectedPersonIds = selectedPersonId?.let { listOf(it) } ?: emptyList(),
     )
 }
 
@@ -434,3 +663,26 @@ private fun plusMinutes(time: LocalTime, minutes: Int): LocalTime {
     val minute = total % 60
     return LocalTime(hour, minute)
 }
+
+@Composable
+private fun TagChip(label: String) {
+    FilterChip(
+        selected = false,
+        onClick = {},
+        enabled = false,
+        label = { Text(label) },
+    )
+}
+
+private fun CandidateDecision.label(): String =
+    when (this) {
+        CandidateDecision.PENDING -> "Pending"
+        CandidateDecision.ACCEPTED -> "Accepted"
+        CandidateDecision.DISCARDED -> "Discarded"
+    }
+
+private fun normalizeCandidateTitle(title: String): String =
+    title
+        .lowercase()
+        .replace(Regex("[^a-z0-9]+"), " ")
+        .trim()

@@ -23,6 +23,12 @@ object ScheduleEngine {
     private const val SLOT_STEP_MINUTES = 30
     private const val DEFAULT_DAY_START_HOUR = 7
     private const val DEFAULT_DAY_END_HOUR = 20
+    private const val DEFAULT_SUGGESTION_DAILY_LOAD_CAP = 5
+    private const val CONFLICT_PENALTY_MULTIPLIER = 10_000
+    private const val DUE_DATE_LATE_PENALTY = 8_000
+    private const val DUE_DATE_NEAR_DIVISOR_MINUTES = 30
+    private const val ROUTINE_ANCHOR_WEIGHT = 1
+    private const val ENERGY_ANCHOR_WEIGHT = 1
 
     fun aggregate(
         events: List<Event>,
@@ -30,6 +36,7 @@ object ScheduleEngine {
         filter: ScheduleFilter,
         nowMillis: Long,
         timeZone: TimeZone = TimeZone.currentSystemDefault(),
+        suggestionDailyLoadCap: Int = DEFAULT_SUGGESTION_DAILY_LOAD_CAP,
     ): ScheduleAggregationResult {
         val eventItems = events.map { event ->
             ScheduleItem(
@@ -40,7 +47,7 @@ object ScheduleEngine {
                 isAllDay = event.isAllDay,
                 priority = null,
                 energy = null,
-                personIds = emptyList(),
+                personIds = event.affectedPersonIds,
                 source = ScheduleSource.EVENT,
                 isFlexible = false,
                 originalEvent = event,
@@ -70,7 +77,14 @@ object ScheduleEngine {
 
         val sortedItems = sortItems(filteredItems)
         val conflicts = detectConflicts(sortedItems)
-        val suggestions = buildSuggestions(tasks, events, nowMillis, timeZone)
+        val suggestions =
+            buildSuggestions(
+                tasks = tasks,
+                events = events,
+                nowMillis = nowMillis,
+                timeZone = timeZone,
+                dailyLoadCap = suggestionDailyLoadCap,
+            )
 
         return ScheduleAggregationResult(
             items = sortedItems,
@@ -148,24 +162,46 @@ object ScheduleEngine {
         events: List<Event>,
         nowMillis: Long,
         timeZone: TimeZone,
+        dailyLoadCap: Int,
     ): List<ScheduleSuggestion> {
-        val flexibleTasks = tasks.filter { it.status == TaskStatus.OPEN && it.scheduledStart == null }
+        val flexibleTasks =
+            tasks
+                .filter { it.status == TaskStatus.OPEN && it.scheduledStart == null }
+                .sortedWith(
+                    compareBy<Task> { priorityRank(it.priority) }
+                        .thenBy { it.dueAt ?: Long.MAX_VALUE }
+                )
         if (flexibleTasks.isEmpty()) return emptyList()
 
         val today = Instant.fromEpochMilliseconds(nowMillis).toLocalDateTime(timeZone).date
         val busy = buildBusyIntervals(events, tasks, today, timeZone)
         val suggestions = mutableListOf<ScheduleSuggestion>()
+        val dayStart = today.atStartOfDayIn(timeZone).toEpochMilliseconds()
+        val dayEnd = dayStart + 24 * 60 * 60 * 1000L
+        var mustShouldCount =
+            tasks.count { task ->
+                task.status == TaskStatus.OPEN &&
+                    task.priority != TaskPriority.NICE &&
+                    task.scheduledStart != null &&
+                    task.scheduledStart in dayStart until dayEnd
+            }
 
         flexibleTasks.forEach { task ->
+            val countsTowardCap = task.priority != TaskPriority.NICE
+            if (countsTowardCap && mustShouldCount >= dailyLoadCap) return@forEach
+
             val candidates = findCandidateSlots(task, today, timeZone, busy)
             candidates.take(2).forEach { slot ->
                 suggestions.add(
                     ScheduleSuggestion(
                         taskId = task.id,
-                        startTime = slot.first,
-                        endTime = slot.second,
+                        startTime = slot.start,
+                        endTime = slot.end,
                     )
                 )
+            }
+            if (countsTowardCap && candidates.isNotEmpty()) {
+                mustShouldCount += 1
             }
         }
         return suggestions
@@ -191,12 +227,19 @@ object ScheduleEngine {
         return (eventIntervals + taskIntervals).sortedBy { it.first }
     }
 
+    private data class CandidateSlot(
+        val start: Long,
+        val end: Long,
+        val conflicts: Int,
+        val score: Int,
+    )
+
     private fun findCandidateSlots(
         task: Task,
         date: LocalDate,
         timeZone: TimeZone,
         busyIntervals: List<Pair<Long, Long>>,
-    ): List<Pair<Long, Long>> {
+    ): List<CandidateSlot> {
         val durationMillis = task.durationMinutes * MILLIS_PER_MINUTE
         val dayStart =
             date
@@ -209,27 +252,60 @@ object ScheduleEngine {
         if (dayEnd - dayStart < durationMillis) return emptyList()
 
         val stepMillis = SLOT_STEP_MINUTES * MILLIS_PER_MINUTE
-        val candidates = mutableListOf<Pair<Long, Long>>()
+        val candidates = mutableListOf<CandidateSlot>()
         var cursor = dayStart
         while (cursor + durationMillis <= dayEnd) {
-            val candidate = cursor to (cursor + durationMillis)
-            if (busyIntervals.none { overlaps(candidate.first, candidate.second, it.first, it.second) }) {
-                candidates.add(candidate)
-            }
+            val start = cursor
+            val end = cursor + durationMillis
+            val conflictCount =
+                busyIntervals.count { interval -> overlaps(start, end, interval.first, interval.second) }
+            val score = scoreSlot(start = start, task = task, dayStart = dayStart, conflicts = conflictCount)
+            candidates.add(
+                CandidateSlot(
+                    start = start,
+                    end = end,
+                    conflicts = conflictCount,
+                    score = score,
+                ),
+            )
             cursor += stepMillis
         }
-
-        return candidates.sortedBy { scoreSlot(it.first, task.energy, dayStart) }
+        val conflictFree = candidates.filter { it.conflicts == 0 }
+        return (if (conflictFree.isNotEmpty()) conflictFree else candidates).sortedBy { it.score }
     }
 
-    private fun scoreSlot(start: Long, energy: TaskEnergy, dayStart: Long): Int {
+    private fun scoreSlot(
+        start: Long,
+        task: Task,
+        dayStart: Long,
+        conflicts: Int,
+    ): Int {
         val minutesFromStart = ((start - dayStart) / MILLIS_PER_MINUTE).toInt()
-        val preferredMinutes =
-            when (energy) {
+        val preferredByEnergy =
+            when (task.energy) {
                 TaskEnergy.HIGH -> 120
                 TaskEnergy.MEDIUM -> 360
                 TaskEnergy.LOW -> 540
             }
-        return abs(minutesFromStart - preferredMinutes)
+        val energyPenalty = abs(minutesFromStart - preferredByEnergy) * ENERGY_ANCHOR_WEIGHT
+        val routinePenalty =
+            abs(minutesFromStart - preferredRoutineAnchorMinutes(task.priority)) * ROUTINE_ANCHOR_WEIGHT
+        val duePenalty = dueDatePenalty(task.dueAt, start)
+        val conflictPenalty = conflicts * CONFLICT_PENALTY_MULTIPLIER
+        return energyPenalty + routinePenalty + duePenalty + conflictPenalty
+    }
+
+    private fun preferredRoutineAnchorMinutes(priority: TaskPriority): Int =
+        when (priority) {
+            TaskPriority.MUST -> 120
+            TaskPriority.SHOULD -> 300
+            TaskPriority.NICE -> 540
+        }
+
+    private fun dueDatePenalty(dueAt: Long?, candidateStart: Long): Int {
+        if (dueAt == null) return 0
+        val delta = dueAt - candidateStart
+        if (delta <= 0L) return DUE_DATE_LATE_PENALTY
+        return (delta / MILLIS_PER_MINUTE / DUE_DATE_NEAR_DIVISOR_MINUTES).toInt()
     }
 }

@@ -55,4 +55,26 @@ class OcrStructuringEngineTest {
         assertTrue(result.candidates.isNotEmpty())
         assertTrue(result.candidates.first().title.contains("Field Trip"))
     }
+
+    @Test
+    fun inferRecurringRule_detectsWeeklyByDayToken() {
+        val rule = OcrStructuringEngine.inferRecurringRule("Soccer practice every Tuesday")
+        assertEquals("FREQ=WEEKLY;BYDAY=TU", rule)
+    }
+
+    @Test
+    fun inferRecurringRule_usesDateFallbackForWeeklyPattern() {
+        val rule =
+            OcrStructuringEngine.inferRecurringRule(
+                text = "Library pickup every week",
+                date = LocalDate(2026, 3, 16),
+            )
+        assertEquals("FREQ=WEEKLY;BYDAY=MO", rule)
+    }
+
+    @Test
+    fun inferRecurringRule_returnsNullWhenPatternMissing() {
+        val rule = OcrStructuringEngine.inferRecurringRule("One-time school photo day")
+        assertNull(rule)
+    }
 }
