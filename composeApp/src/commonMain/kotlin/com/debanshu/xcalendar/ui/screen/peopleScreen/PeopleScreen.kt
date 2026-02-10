@@ -40,13 +40,13 @@ import com.debanshu.xcalendar.domain.model.ExternalCalendar
 import com.debanshu.xcalendar.domain.model.GoogleAccountLink
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
-import com.debanshu.xcalendar.domain.usecase.calendar.GetUserCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.google.FetchGoogleCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.google.GetGoogleAccountForPersonUseCase
 import com.debanshu.xcalendar.domain.usecase.google.ImportGoogleCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.google.LinkGoogleAccountUseCase
 import com.debanshu.xcalendar.domain.usecase.google.SyncGoogleCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.google.UnlinkGoogleAccountUseCase
+import com.debanshu.xcalendar.domain.usecase.person.DeletePersonUseCase
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.person.UpdatePersonUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
@@ -55,6 +55,7 @@ import com.debanshu.xcalendar.platform.rememberGoogleAuthController
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
+import kotlin.time.Clock
 
 @Composable
 fun PeopleScreen(
@@ -65,6 +66,7 @@ fun PeopleScreen(
 
     val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val updatePersonUseCase = koinInject<UpdatePersonUseCase>()
+    val deletePersonUseCase = koinInject<DeletePersonUseCase>()
     val getGoogleAccountForPersonUseCase = koinInject<GetGoogleAccountForPersonUseCase>()
     val linkGoogleAccountUseCase = koinInject<LinkGoogleAccountUseCase>()
     val unlinkGoogleAccountUseCase = koinInject<UnlinkGoogleAccountUseCase>()
@@ -84,6 +86,8 @@ fun PeopleScreen(
     var pendingAccountId by remember { mutableStateOf<String?>(null) }
     var selectedCalendarIds by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showCalendarSheet by remember { mutableStateOf(false) }
+    var showAddChildDialog by remember { mutableStateOf(false) }
+    var removeTarget by remember { mutableStateOf<Person?>(null) }
 
     val authController = rememberGoogleAuthController(
         onSuccess = { result ->
@@ -120,10 +124,18 @@ fun PeopleScreen(
             color = XCalendarTheme.colorScheme.onSurface,
         )
         Text(
-            text = "Only Mom can connect and manage Google calendars. All profiles are editable.",
+            text = "Only Mom can currently connect and manage Google calendars. All profiles are editable.",
             style = XCalendarTheme.typography.bodyMedium,
             color = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            Button(onClick = { showAddChildDialog = true }) {
+                Text("Add child")
+            }
+        }
 
         if (sortedPeople.isEmpty()) {
             EmptyState()
@@ -153,6 +165,11 @@ fun PeopleScreen(
                     onEdit = {
                         editTarget = person
                     },
+                    onRemoveChild = if (person.role == PersonRole.CHILD) {
+                        { removeTarget = person }
+                    } else {
+                        null
+                    },
                 )
             }
         }
@@ -177,6 +194,47 @@ fun PeopleScreen(
                 scope.launch {
                     updatePersonUseCase(updated)
                     editTarget = null
+                }
+            },
+        )
+    }
+
+    if (showAddChildDialog) {
+        AddChildDialog(
+            onDismiss = { showAddChildDialog = false },
+            onAdd = { childName, childColor ->
+                scope.launch {
+                    val now = Clock.System.now().toEpochMilliseconds()
+                    val nextSortOrder = (sortedPeople.maxOfOrNull { it.sortOrder } ?: -1) + 1
+                    updatePersonUseCase(
+                        Person(
+                            id = "person_child_${now}_$nextSortOrder",
+                            name = childName,
+                            role = PersonRole.CHILD,
+                            ageYears = null,
+                            color = childColor,
+                            isAdmin = false,
+                            isDefault = false,
+                            sortOrder = nextSortOrder,
+                            isArchived = false,
+                            createdAt = now,
+                            updatedAt = now,
+                        ),
+                    )
+                    showAddChildDialog = false
+                }
+            },
+        )
+    }
+
+    removeTarget?.let { person ->
+        RemoveChildDialog(
+            person = person,
+            onDismiss = { removeTarget = null },
+            onConfirmRemove = {
+                scope.launch {
+                    deletePersonUseCase(person)
+                    removeTarget = null
                 }
             },
         )
@@ -221,6 +279,7 @@ private fun PersonCard(
     onDisconnectGoogle: (GoogleAccountLink) -> Unit,
     onManageCalendars: (GoogleAccountLink) -> Unit,
     onEdit: () -> Unit,
+    onRemoveChild: (() -> Unit)?,
 ) {
     val account by remember(person.id) { getGoogleAccountForPersonUseCase(person.id) }
         .collectAsState(initial = null)
@@ -231,10 +290,13 @@ private fun PersonCard(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Box(
                         modifier = Modifier.size(44.dp).background(Color(person.color), CircleShape),
                         contentAlignment = Alignment.Center,
@@ -268,6 +330,20 @@ private fun PersonCard(
                 }
             }
 
+            if (onRemoveChild != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    TextButton(onClick = onRemoveChild) {
+                        Text(
+                            text = "Remove child",
+                            color = XCalendarTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+
             if (person.role == PersonRole.MOM || person.role == PersonRole.PARTNER) {
                 if (!PlatformFeatures.calendarOAuth.supported) {
                     RoleChip(label = PlatformFeatures.calendarOAuth.reason ?: "Calendar sync unavailable")
@@ -295,6 +371,101 @@ private fun PersonCard(
             }
         }
     }
+}
+
+@Composable
+private fun AddChildDialog(
+    onDismiss: () -> Unit,
+    onAdd: (name: String, color: Int) -> Unit,
+) {
+    var name by rememberSaveable { mutableStateOf("") }
+    var selectedColor by rememberSaveable { mutableStateOf(colorChoices().first()) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Add child") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    label = { Text("Child name") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    text = "Avatar color",
+                    style = XCalendarTheme.typography.bodyMedium,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    colorChoices().forEach { colorValue ->
+                        val isSelected = colorValue == selectedColor
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clickable { selectedColor = colorValue },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(colorValue), CircleShape),
+                            )
+                            if (isSelected) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(Color.White, CircleShape),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val nextName = name.trim().ifEmpty { "Child" }
+                    onAdd(nextName, selectedColor)
+                },
+            ) {
+                Text("Add")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
+}
+
+@Composable
+private fun RemoveChildDialog(
+    person: Person,
+    onDismiss: () -> Unit,
+    onConfirmRemove: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Remove child profile") },
+        text = {
+            Text(
+                "Remove ${person.name}? Linked tasks and routines will stay, but will no longer be assigned to this child.",
+            )
+        },
+        confirmButton = {
+            Button(onClick = onConfirmRemove) {
+                Text("Remove")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        },
+    )
 }
 
 @Composable

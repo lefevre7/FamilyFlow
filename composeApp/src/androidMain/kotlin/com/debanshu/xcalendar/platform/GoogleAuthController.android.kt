@@ -15,8 +15,6 @@ import net.openid.appauth.AuthorizationResponse
 import net.openid.appauth.AuthorizationService
 import net.openid.appauth.AuthorizationServiceConfiguration
 import net.openid.appauth.ResponseTypeValues
-import net.openid.appauth.TokenRequest
-import net.openid.appauth.TokenResponse
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -49,7 +47,7 @@ actual fun rememberGoogleAuthController(
         val response = AuthorizationResponse.fromIntent(data)
         val exception = AuthorizationException.fromIntent(data)
         if (exception != null) {
-            onError(exception.errorDescription ?: "Authorization failed.")
+            onError(formatAuthorizationException(exception))
             return@rememberLauncherForActivityResult
         }
         if (response == null) {
@@ -100,31 +98,38 @@ actual fun rememberGoogleAuthController(
         )
     }
     val clientId = remember { BuildKonfig.CLIENT_ID }
-    val redirectUri = remember { Uri.parse("${context.packageName}:/oauth2redirect") }
+    val redirectUri = remember(clientId) { buildGoogleRedirectUri(clientId) }
 
-    val authRequest = remember {
-        AuthorizationRequest.Builder(
-            config,
-            clientId,
-            ResponseTypeValues.CODE,
-            redirectUri,
-        )
-            .setScope(SCOPES)
-            .setPrompt("consent")
-            .setAdditionalParameters(
-                mapOf(
-                    "access_type" to "offline",
+    val authRequest =
+        remember(config, clientId, redirectUri) {
+            redirectUri?.let { uri ->
+                AuthorizationRequest.Builder(
+                    config,
+                    clientId,
+                    ResponseTypeValues.CODE,
+                    uri,
                 )
-            )
-            .build()
-    }
+                    .setScope(SCOPES)
+                    .setPrompt("consent")
+                    .setAdditionalParameters(
+                        mapOf(
+                            "access_type" to "offline",
+                        )
+                    )
+                    .build()
+            }
+        }
 
     return object : GoogleAuthController {
-        override val isAvailable: Boolean = clientId.isNotBlank()
+        override val isAvailable: Boolean = clientId.isNotBlank() && redirectUri != null
 
         override fun launch() {
             if (clientId.isBlank()) {
                 onError("Google Client ID missing.")
+                return
+            }
+            if (redirectUri == null || authRequest == null) {
+                onError("Google Client ID format is invalid. Use an *.apps.googleusercontent.com client ID.")
                 return
             }
             val intent = authService.getAuthorizationRequestIntent(authRequest)
@@ -143,6 +148,23 @@ private fun parseIdToken(token: String, json: Json): IdTokenPayload? {
     }.getOrNull()
 }
 
+private fun formatAuthorizationException(exception: AuthorizationException): String {
+    val error = exception.error?.takeIf { it.isNotBlank() }
+    val description = exception.errorDescription?.takeIf { it.isNotBlank() }
+    val uri = exception.errorUri?.toString()?.takeIf { it.isNotBlank() }
+
+    val details =
+        listOfNotNull(error, description, uri)
+            .joinToString(" | ")
+            .trim()
+
+    return if (details.isEmpty()) {
+        "Authorization failed."
+    } else {
+        "Authorization failed: $details"
+    }
+}
+
 @Serializable
 private data class IdTokenPayload(
     @SerialName("sub")
@@ -155,3 +177,10 @@ private const val AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 private const val TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
 private const val SCOPES =
     "openid email profile https://www.googleapis.com/auth/calendar"
+
+private fun buildGoogleRedirectUri(clientId: String): Uri? {
+    if (!clientId.endsWith(".apps.googleusercontent.com")) return null
+    val base = clientId.substringBefore(".apps.googleusercontent.com")
+    if (base.isBlank()) return null
+    return Uri.parse("com.googleusercontent.apps.$base:/oauth2redirect")
+}

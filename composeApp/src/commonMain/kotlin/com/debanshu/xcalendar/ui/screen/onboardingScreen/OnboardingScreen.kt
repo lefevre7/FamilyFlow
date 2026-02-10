@@ -257,9 +257,10 @@ private fun StarterProfilesStep(
 ) {
     val hasMom = people.any { it.role == PersonRole.MOM }
     val hasPartner = people.any { it.role == PersonRole.PARTNER }
-    val hasKid4 = people.any { it.role == PersonRole.CHILD && it.ageYears == 4 }
-    val hasKid2 = people.any { it.role == PersonRole.CHILD && it.ageYears == 2 }
-    val hasKid1 = people.any { it.role == PersonRole.CHILD && it.ageYears == 1 }
+    val childCount = people.count { it.role == PersonRole.CHILD }
+    val hasKidA = childCount >= 1
+    val hasKidB = childCount >= 2
+    val hasKidC = childCount >= 3
 
     Text(
         text = "Starter family profiles",
@@ -267,15 +268,15 @@ private fun StarterProfilesStep(
         color = XCalendarTheme.colorScheme.onSurface,
     )
     Text(
-        text = "Mom lens + partner + kids presets (4, 2, 1) are ready so you can start quickly.",
+        text = "Mom lens + partner + kid presets are ready so you can start quickly.",
         style = XCalendarTheme.typography.bodyMedium,
         color = XCalendarTheme.colorScheme.onSurfaceVariant,
     )
     ProfileCheckRow(label = "Mom (admin lens)", isReady = hasMom)
     ProfileCheckRow(label = "Partner profile", isReady = hasPartner)
-    ProfileCheckRow(label = "Kid preset (4 years)", isReady = hasKid4)
-    ProfileCheckRow(label = "Kid preset (2 years)", isReady = hasKid2)
-    ProfileCheckRow(label = "Kid preset (1 year)", isReady = hasKid1)
+    ProfileCheckRow(label = "Kid preset A", isReady = hasKidA)
+    ProfileCheckRow(label = "Kid preset B", isReady = hasKidB)
+    ProfileCheckRow(label = "Kid preset C", isReady = hasKidC)
     Text(
         text = "You can rename profiles and colors later in People.",
         style = XCalendarTheme.typography.bodySmall,

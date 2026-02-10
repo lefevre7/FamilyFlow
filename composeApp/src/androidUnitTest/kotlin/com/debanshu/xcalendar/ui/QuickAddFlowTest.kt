@@ -8,7 +8,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasSetTextAction
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -39,7 +38,7 @@ import org.robolectric.annotation.Config
 class QuickAddFlowTest {
 
     @get:Rule
-    val composeRule = createAndroidComposeRule<TestActivity>()
+    val composeRule = createIntentComposeRule<TestActivity>()
 
     private lateinit var deps: TestDependencies
 

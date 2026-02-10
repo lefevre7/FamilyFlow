@@ -3,7 +3,6 @@ package com.debanshu.xcalendar.ui
 import android.app.Application
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import com.debanshu.xcalendar.domain.model.FamilyLens
@@ -31,7 +30,7 @@ import kotlin.test.assertEquals
 class FamilyLensMiniHeaderPersistenceTest {
 
     @get:Rule
-    val composeRule = createAndroidComposeRule<TestActivity>()
+    val composeRule = createIntentComposeRule<TestActivity>()
 
     private class FakeLensPreferencesRepository(
         initial: FamilyLensSelection,

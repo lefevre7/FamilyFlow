@@ -2,7 +2,6 @@ package com.debanshu.xcalendar.ui
 
 import android.app.Application
 import android.content.Context
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
@@ -39,7 +38,7 @@ import kotlin.test.assertTrue
 class TodayShareSnapshotTest {
 
     @get:Rule
-    val composeRule = createAndroidComposeRule<TestActivity>()
+    val composeRule = createIntentComposeRule<TestActivity>()
 
     private lateinit var deps: com.debanshu.xcalendar.test.TestDependencies
 

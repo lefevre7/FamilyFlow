@@ -65,7 +65,7 @@ class PersonRepository(
                     ),
                     createPerson(
                         id = "person_kid_4",
-                        name = "Kid (4)",
+                        name = "Kid A",
                         role = PersonRole.CHILD,
                         ageYears = 4,
                         isAdmin = false,
@@ -75,7 +75,7 @@ class PersonRepository(
                     ),
                     createPerson(
                         id = "person_kid_2",
-                        name = "Kid (2)",
+                        name = "Kid B",
                         role = PersonRole.CHILD,
                         ageYears = 2,
                         isAdmin = false,
@@ -85,7 +85,7 @@ class PersonRepository(
                     ),
                     createPerson(
                         id = "person_kid_1",
-                        name = "Kid (1)",
+                        name = "Kid C",
                         role = PersonRole.CHILD,
                         ageYears = 1,
                         isAdmin = false,

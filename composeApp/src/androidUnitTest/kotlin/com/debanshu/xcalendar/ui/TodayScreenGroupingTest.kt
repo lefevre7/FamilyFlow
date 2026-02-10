@@ -1,10 +1,8 @@
 package com.debanshu.xcalendar.ui
 
-import com.debanshu.xcalendar.ui.TestActivity
 import android.app.Application
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
@@ -39,7 +37,7 @@ import kotlin.time.Clock
 class TodayScreenGroupingTest {
 
     @get:Rule
-    val composeRule = createAndroidComposeRule<TestActivity>()
+    val composeRule = createIntentComposeRule<TestActivity>()
 
     @Before
     fun setUp() {

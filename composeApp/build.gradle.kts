@@ -5,6 +5,23 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompilationTask
 import java.util.Properties
 
+val localProperties =
+    Properties().apply {
+        val propsFile = rootProject.file("local.properties")
+        if (propsFile.exists()) {
+            load(propsFile.inputStream())
+        }
+    }
+
+val configuredClientId = localProperties["ClientId"]?.toString().orEmpty()
+val appAuthRedirectScheme =
+    configuredClientId
+        .takeIf { it.endsWith(".apps.googleusercontent.com") }
+        ?.substringBefore(".apps.googleusercontent.com")
+        ?.takeIf { it.isNotBlank() }
+        ?.let { "com.googleusercontent.apps.$it" }
+        ?: "com.debanshu.xcalendar"
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)
@@ -178,7 +195,7 @@ android {
 
     defaultConfig {
         applicationId = "com.debanshu.xcalendar"
-        manifestPlaceholders["appAuthRedirectScheme"] = "com.debanshu.xcalendar"
+        manifestPlaceholders["appAuthRedirectScheme"] = appAuthRedirectScheme
         minSdk =
             libs.versions.android.minSdk
                 .get()
@@ -211,14 +228,6 @@ android {
 
 buildkonfig {
     packageName = "com.debanshu.xcalendar"
-
-    val localProperties =
-        Properties().apply {
-            val propsFile = rootProject.file("local.properties")
-            if (propsFile.exists()) {
-                load(propsFile.inputStream())
-            }
-        }
 
     defaultConfigs {
         buildConfigField(
