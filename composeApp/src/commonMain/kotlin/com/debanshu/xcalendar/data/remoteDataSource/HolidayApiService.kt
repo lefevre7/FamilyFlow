@@ -1,8 +1,7 @@
 package com.debanshu.xcalendar.data.remoteDataSource
 
-import com.debanshu.xcalendar.BuildKonfig
 import com.debanshu.xcalendar.data.remoteDataSource.error.DataError
-import com.debanshu.xcalendar.data.remoteDataSource.model.holiday.HolidayResponse
+import com.debanshu.xcalendar.data.remoteDataSource.model.holiday.EnricoHolidayItem
 import io.ktor.client.HttpClient
 import kotlinx.serialization.json.Json
 import org.koin.core.annotation.Single
@@ -13,18 +12,20 @@ class HolidayApiService(
     json: Json,
 ) {
     private val clientWrapper = ClientWrapper(client, json)
-    private val baseUrl = "https://calendarific.com/api/v2/holidays"
+    private val baseUrl = "https://kayaposoft.com/enrico/json/v2.0/"
 
     suspend fun getHolidays(
         countryCode: String,
+        region: String,
         year: Int,
-    ): Result<HolidayResponse, DataError> =
-        clientWrapper.networkGetUsecase<HolidayResponse>(
+    ): Result<List<EnricoHolidayItem>, DataError> =
+        clientWrapper.networkGetUsecase<List<EnricoHolidayItem>>(
             baseUrl,
             mapOf(
-                "api_key" to BuildKonfig.API_KEY,
-                "country" to countryCode,
+                "action" to "getHolidaysForYear",
                 "year" to year.toString(),
+                "country" to countryCode,
+                "region" to region,
             ),
         )
 }

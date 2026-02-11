@@ -87,6 +87,7 @@ class TodayShareSnapshotTest {
                 TodayScreen(
                     dateStateHolder = dateStateHolder,
                     events = persistentListOf(event),
+                    holidays = persistentListOf(),
                     isVisible = true,
                 )
             }

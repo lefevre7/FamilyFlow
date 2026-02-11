@@ -27,7 +27,7 @@ import com.debanshu.xcalendar.data.localDataSource.model.UserEntity
  * Current database version.
  * Increment this when making schema changes and add a migration.
  */
-const val DATABASE_VERSION = 3
+const val DATABASE_VERSION = 4
 
 const val DATABASE_NAME = "xcalendar.db"
 
@@ -85,6 +85,7 @@ abstract class AppDatabase : RoomDatabase() {
         val MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
+            MIGRATION_3_4,
         )
     }
 }
@@ -247,6 +248,27 @@ val MIGRATION_2_3 =
                 """.trimIndent()
             )
             db.execSQL("CREATE INDEX IF NOT EXISTS index_calendar_sources_providerAccountId ON calendar_sources(providerAccountId)")
+        }
+    }
+
+val MIGRATION_3_4 =
+    object : Migration(3, 4) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            // Drop and recreate holidays table to add holidayType and translations fields
+            // This clears cached Calendarific (India) data and prepares for Enrico (USA/Utah) API
+            db.execSQL("DROP TABLE IF EXISTS holidays")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS holidays (
+                    id TEXT NOT NULL PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    date INTEGER NOT NULL,
+                    countryCode TEXT NOT NULL,
+                    holidayType TEXT NOT NULL,
+                    translations TEXT NOT NULL
+                )
+                """.trimIndent()
+            )
         }
     }
 

@@ -6,11 +6,13 @@ import kotlinx.coroutines.flow.Flow
 interface IHolidayRepository {
     suspend fun updateHolidays(
         countryCode: String,
-        year: Int,
+        region: String,
+        year: Int
     )
 
     fun getHolidaysForYear(
         countryCode: String,
+        region: String,
         year: Int,
     ): Flow<List<Holiday>>
 }

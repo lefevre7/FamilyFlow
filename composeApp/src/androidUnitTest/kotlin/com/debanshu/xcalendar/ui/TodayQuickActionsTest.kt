@@ -124,6 +124,7 @@ class TodayQuickActionsTest {
                 TodayScreen(
                     dateStateHolder = dateStateHolder,
                     events = persistentListOf(),
+                    holidays = persistentListOf(),
                     isVisible = true,
                 )
             }

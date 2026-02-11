@@ -43,9 +43,11 @@ import com.debanshu.xcalendar.domain.model.TaskEnergy
 import com.debanshu.xcalendar.domain.model.TaskPriority
 import com.debanshu.xcalendar.domain.model.TaskType
 import com.debanshu.xcalendar.domain.usecase.inbox.CreateInboxItemUseCase
+import com.debanshu.xcalendar.domain.usecase.inbox.StructureBrainDumpUseCase
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.task.CreateTaskUseCase
 import com.debanshu.xcalendar.platform.PlatformFeatures
+import com.debanshu.xcalendar.platform.PlatformNotifier
 import com.debanshu.xcalendar.platform.VoiceCaptureController
 import com.debanshu.xcalendar.platform.rememberVoiceCaptureController
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
@@ -76,6 +78,8 @@ fun QuickAddSheet(
     val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val createTaskUseCase = koinInject<CreateTaskUseCase>()
     val createInboxItemUseCase = koinInject<CreateInboxItemUseCase>()
+    val structureBrainDumpUseCase = koinInject<StructureBrainDumpUseCase>()
+    val notifier = koinInject<PlatformNotifier>()
 
     val people by remember { getPeopleUseCase() }.collectAsState(initial = emptyList())
 
@@ -86,22 +90,67 @@ fun QuickAddSheet(
     var voiceStatus by rememberSaveable { mutableStateOf<String?>(null) }
     var selectedPersonId by rememberSaveable { mutableStateOf(defaultPersonId) }
 
+    LaunchedEffect(defaultPersonId, selectedPersonId) {
+        if (selectedPersonId == null && defaultPersonId != null) {
+            selectedPersonId = defaultPersonId
+        }
+    }
+
     val voiceController = rememberVoiceCaptureController(
         onResult = { text ->
             val trimmed = text.trim()
             if (trimmed.isNotEmpty()) {
                 scope.launch {
-                    createInboxItemUseCase(
-                        InboxItem(
-                            id = Uuid.random().toString(),
-                            rawText = trimmed,
-                            source = InboxSource.VOICE,
-                            status = InboxStatus.NEW,
-                            createdAt = Clock.System.now().toEpochMilliseconds(),
-                            personId = selectedPersonId,
-                        ),
-                    )
-                    onDismiss()
+                    runCatching {
+                        val structured = structureBrainDumpUseCase(trimmed)
+                        val now = Clock.System.now().toEpochMilliseconds()
+                        val drafts =
+                            if (structured.tasks.isNotEmpty()) {
+                                structured.tasks
+                            } else {
+                                listOf(com.debanshu.xcalendar.domain.model.BrainDumpTaskDraft(title = trimmed))
+                            }
+
+                        drafts.forEach { draft ->
+                            createTaskUseCase(
+                                Task(
+                                    id = Uuid.random().toString(),
+                                    title = draft.title,
+                                    notes = draft.notes,
+                                    priority = draft.priority ?: TaskPriority.SHOULD,
+                                    energy = draft.energy ?: TaskEnergy.MEDIUM,
+                                    type = TaskType.FLEXIBLE,
+                                    assignedToPersonId = selectedPersonId,
+                                    affectedPersonIds = selectedPersonId?.let { listOf(it) } ?: emptyList(),
+                                    createdAt = now,
+                                    updatedAt = now,
+                                ),
+                            )
+                        }
+
+                        createInboxItemUseCase(
+                            InboxItem(
+                                id = Uuid.random().toString(),
+                                rawText = trimmed,
+                                source = InboxSource.VOICE,
+                                status = InboxStatus.PROCESSED,
+                                createdAt = now,
+                                personId = selectedPersonId,
+                            ),
+                        )
+
+                        val count = drafts.size
+                        notifier.showToast(
+                            if (count == 1) {
+                                "Added 1 task from voice note"
+                            } else {
+                                "Added $count tasks from voice note"
+                            },
+                        )
+                        onDismiss()
+                    }.onFailure {
+                        voiceStatus = "Unable to process voice note."
+                    }
                 }
             } else {
                 voiceStatus = "Didn't catch that. Try again."

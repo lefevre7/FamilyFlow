@@ -212,7 +212,7 @@ class FakeHolidayRepository(
     
     val updateCalls = mutableListOf<Pair<String, Int>>()
     
-    override suspend fun updateHolidays(countryCode: String, year: Int) {
+    override suspend fun updateHolidays(countryCode: String, region: String, year: Int) {
         updateCalls.add(Pair(countryCode, year))
         
         if (shouldFailOnUpdate) {
@@ -222,6 +222,7 @@ class FakeHolidayRepository(
     
     override fun getHolidaysForYear(
         countryCode: String,
+        region: String,
         year: Int
     ): Flow<List<Holiday>> {
         return _holidays.map { holidays ->

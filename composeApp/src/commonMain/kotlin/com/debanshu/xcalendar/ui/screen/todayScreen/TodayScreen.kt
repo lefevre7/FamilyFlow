@@ -1,6 +1,7 @@
 package com.debanshu.xcalendar.ui.screen.todayScreen
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -46,6 +47,7 @@ import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.common.toLocalDateTime
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.FamilyLensSelection
+import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.Routine
@@ -63,6 +65,7 @@ import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.platform.PlatformNotifier
 import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
+import com.debanshu.xcalendar.ui.components.core.ScheduleHolidayTag
 import com.debanshu.xcalendar.ui.state.ActiveTimer
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import com.debanshu.xcalendar.ui.state.LensStateHolder
@@ -96,7 +99,9 @@ fun TodayScreen(
     modifier: Modifier = Modifier,
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
+    holidays: ImmutableList<Holiday>,
     isVisible: Boolean = true,
+    onEventClick: (Event) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
 ) {
     if (!isVisible) return
@@ -179,6 +184,12 @@ fun TodayScreen(
                     true
                 }
             }
+    }
+
+    val holidaysForDay = remember(holidays, dateState.selectedDate, timeZone) {
+        holidays.filter { holiday ->
+            holiday.date.toLocalDateTime(timeZone).date == dateState.selectedDate
+        }
     }
 
     val filter = remember(lensSelection, momId) {
@@ -374,6 +385,10 @@ fun TodayScreen(
             },
         )
 
+        if (holidaysForDay.isNotEmpty()) {
+            HolidaySection(holidays = holidaysForDay)
+        }
+
         if (conflicts.isNotEmpty()) {
             ConflictReviewBanner(
                 conflictCount = conflicts.size,
@@ -392,6 +407,7 @@ fun TodayScreen(
                 onDone = onDoneItem,
                 onSnooze = onSnoozeItem,
                 onShare = onShareItem,
+                onEventClick = onEventClick,
             )
         } else {
             val morningItems = groupedItems[DaySection.MORNING].orEmpty()
@@ -412,6 +428,7 @@ fun TodayScreen(
                         onDone = onDoneItem,
                         onSnooze = onSnoozeItem,
                         onShare = onShareItem,
+                        onEventClick = onEventClick,
                     )
                 }
                 if (afternoonItems.isNotEmpty()) {
@@ -424,6 +441,7 @@ fun TodayScreen(
                         onDone = onDoneItem,
                         onSnooze = onSnoozeItem,
                         onShare = onShareItem,
+                        onEventClick = onEventClick,
                     )
                 }
                 if (eveningItems.isNotEmpty()) {
@@ -436,11 +454,26 @@ fun TodayScreen(
                         onDone = onDoneItem,
                         onSnooze = onSnoozeItem,
                         onShare = onShareItem,
+                        onEventClick = onEventClick,
                     )
                 }
             }
         }
         Spacer(modifier = Modifier.height(48.dp))
+    }
+}
+
+@Composable
+private fun HolidaySection(holidays: List<Holiday>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Holidays",
+            style = XCalendarTheme.typography.titleMedium,
+            color = XCalendarTheme.colorScheme.onSurface,
+        )
+        holidays.forEach { holiday ->
+            ScheduleHolidayTag(name = holiday.name)
+        }
     }
 }
 
@@ -591,6 +624,7 @@ private fun NowSection(
     onDone: (ScheduleItem) -> Unit,
     onSnooze: (ScheduleItem) -> Unit,
     onShare: (ScheduleItem) -> Unit,
+    onEventClick: (Event) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -608,6 +642,7 @@ private fun NowSection(
                     onDone = onDone,
                     onSnooze = onSnooze,
                     onShare = onShare,
+                    onEventClick = onEventClick,
                 )
             }
         }
@@ -624,6 +659,7 @@ private fun DaySectionGroup(
     onDone: (ScheduleItem) -> Unit,
     onSnooze: (ScheduleItem) -> Unit,
     onShare: (ScheduleItem) -> Unit,
+    onEventClick: (Event) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
@@ -639,6 +675,7 @@ private fun DaySectionGroup(
                 onDone = onDone,
                 onSnooze = onSnooze,
                 onShare = onShare,
+                onEventClick = onEventClick,
             )
         }
         val hiddenCount = items.size - visibleItems.size
@@ -662,13 +699,18 @@ private fun ScheduleItemCard(
     onDone: (ScheduleItem) -> Unit,
     onSnooze: (ScheduleItem) -> Unit,
     onShare: (ScheduleItem) -> Unit,
+    onEventClick: (Event) -> Unit,
 ) {
     val timerStateHolder = koinInject<TimerStateHolder>()
     val people = item.personIds.mapNotNull { peopleById[it] }
     val whoAffectedLabel = people.joinToString(", ") { it.name }.ifBlank { null }
     val accentColor = resolveAccentColor(item, people, XCalendarTheme.colorScheme.primary)
+    val clickableModifier =
+        item.originalEvent?.let { event ->
+            Modifier.clickable { onEventClick(event) }
+        } ?: Modifier
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().then(clickableModifier),
         shape = RoundedCornerShape(18.dp),
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {

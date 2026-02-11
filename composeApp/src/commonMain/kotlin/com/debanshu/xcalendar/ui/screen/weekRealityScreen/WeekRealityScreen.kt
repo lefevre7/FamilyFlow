@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.common.toLocalDateTime
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.FamilyLensSelection
+import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.ScheduleFilter
@@ -51,6 +52,7 @@ import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
 import com.debanshu.xcalendar.ui.components.SwipeablePager
+import com.debanshu.xcalendar.ui.components.core.ScheduleHolidayTag
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import com.debanshu.xcalendar.ui.state.LensStateHolder
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
@@ -79,7 +81,9 @@ fun WeekRealityScreen(
     modifier: Modifier = Modifier,
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
+    holidays: ImmutableList<Holiday>,
     isVisible: Boolean = true,
+    onEventClick: (Event) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
 ) {
     if (!isVisible) return
@@ -126,6 +130,7 @@ fun WeekRealityScreen(
             weekStart = weekStart,
             currentDate = dateState.currentDate,
             events = events,
+            holidays = holidays,
             tasks = tasks,
             people = people,
             momId = momId,
@@ -140,6 +145,7 @@ fun WeekRealityScreen(
             onSelectDay = { selectedDay ->
                 dateStateHolder.updateSelectedDateState(selectedDay)
             },
+            onEventClick = onEventClick,
             pendingConflictCount = conflicts.size,
             onNavigateToSettings = onNavigateToSettings,
         )
@@ -152,6 +158,7 @@ private fun WeekPage(
     weekStart: LocalDate,
     currentDate: LocalDate,
     events: ImmutableList<Event>,
+    holidays: ImmutableList<Holiday>,
     tasks: List<com.debanshu.xcalendar.domain.model.Task>,
     people: List<Person>,
     momId: String?,
@@ -164,6 +171,7 @@ private fun WeekPage(
     timeZone: TimeZone,
     nowMillis: Long,
     onSelectDay: (LocalDate) -> Unit,
+    onEventClick: (Event) -> Unit,
     pendingConflictCount: Int,
     onNavigateToSettings: () -> Unit,
 ) {
@@ -202,6 +210,13 @@ private fun WeekPage(
                     timeZone = timeZone,
                 )
             DaySchedule(date = date, items = aggregation.items)
+        }
+    }
+    val holidaysByDay = remember(weekDays, holidays, timeZone) {
+        weekDays.associateWith { date ->
+            holidays.filter { holiday ->
+                holiday.date.toLocalDateTime(timeZone).date == date
+            }
         }
     }
 
@@ -243,7 +258,9 @@ private fun WeekPage(
                     date = date,
                     isToday = date == currentDate,
                     items = schedule.items,
+                    holidays = holidaysByDay[date].orEmpty(),
                     peopleById = peopleById,
+                    onEventClick = onEventClick,
                     onMoreClick = {
                         selectedDay = date
                         onSelectDay(date)
@@ -262,7 +279,12 @@ private fun WeekPage(
             DayDetailSheet(
                 date = selectedSchedule.date,
                 items = selectedSchedule.items,
+                holidays = holidaysByDay[selectedSchedule.date].orEmpty(),
                 peopleById = peopleById,
+                onEventClick = { event ->
+                    selectedDay = null
+                    onEventClick(event)
+                },
             )
         }
     }
@@ -364,7 +386,9 @@ private fun DayColumn(
     date: LocalDate,
     isToday: Boolean,
     items: List<ScheduleItem>,
+    holidays: List<Holiday>,
     peopleById: Map<String, Person>,
+    onEventClick: (Event) -> Unit,
     onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -391,11 +415,26 @@ private fun DayColumn(
         }
 
         val visibleItems = items.take(MAX_ITEMS_PER_DAY)
-        if (visibleItems.isEmpty()) {
+        if (visibleItems.isEmpty() && holidays.isEmpty()) {
             EmptyDayCard()
         } else {
+            holidays.take(2).forEach { holiday ->
+                ScheduleHolidayTag(name = holiday.name)
+            }
+            if (holidays.size > 2) {
+                Text(
+                    text = "+ ${holidays.size - 2} holiday(s)",
+                    style = XCalendarTheme.typography.labelSmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+            }
             visibleItems.forEach { item ->
-                WeekItemCard(item = item, peopleById = peopleById)
+                WeekItemCard(
+                    item = item,
+                    peopleById = peopleById,
+                    onEventClick = onEventClick,
+                    onNonEventClick = onMoreClick,
+                )
             }
         }
         val remaining = items.size - visibleItems.size
@@ -414,12 +453,26 @@ private fun DayColumn(
 private fun WeekItemCard(
     item: ScheduleItem,
     peopleById: Map<String, Person>,
+    onEventClick: (Event) -> Unit,
+    onNonEventClick: (() -> Unit)? = null,
 ) {
     val people = item.personIds.mapNotNull { peopleById[it] }
     val whoAffectedLabel = people.joinToString(", ") { it.name }.ifBlank { null }
     val accentColor = resolveAccentColor(item, people, XCalendarTheme.colorScheme.primary)
+    val event = item.originalEvent
+    val clickableModifier =
+        if (event != null) {
+            Modifier.clickable { onEventClick(event) }
+        } else if (onNonEventClick != null) {
+            Modifier.clickable { onNonEventClick() }
+        } else {
+            Modifier
+        }
 
-    Card(shape = RoundedCornerShape(12.dp)) {
+    Card(
+        modifier = clickableModifier,
+        shape = RoundedCornerShape(12.dp),
+    ) {
         Row(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier.width(4.dp).height(48.dp).background(accentColor),
@@ -483,7 +536,9 @@ private fun EmptyDayCard() {
 private fun DayDetailSheet(
     date: LocalDate,
     items: List<ScheduleItem>,
+    holidays: List<Holiday>,
     peopleById: Map<String, Person>,
+    onEventClick: (Event) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -494,7 +549,12 @@ private fun DayDetailSheet(
             style = XCalendarTheme.typography.titleLarge,
             color = XCalendarTheme.colorScheme.onSurface,
         )
-        if (items.isEmpty()) {
+        if (holidays.isNotEmpty()) {
+            holidays.forEach { holiday ->
+                ScheduleHolidayTag(name = holiday.name)
+            }
+        }
+        if (items.isEmpty() && holidays.isEmpty()) {
             Text(
                 text = "No items for this day.",
                 style = XCalendarTheme.typography.bodyMedium,
@@ -502,7 +562,11 @@ private fun DayDetailSheet(
             )
         } else {
             items.forEach { item ->
-                WeekItemCard(item = item, peopleById = peopleById)
+                WeekItemCard(
+                    item = item,
+                    peopleById = peopleById,
+                    onEventClick = onEventClick,
+                )
             }
         }
         Spacer(modifier = Modifier.height(24.dp))

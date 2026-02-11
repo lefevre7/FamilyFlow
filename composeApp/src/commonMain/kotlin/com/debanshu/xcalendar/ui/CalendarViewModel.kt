@@ -13,6 +13,7 @@ import com.debanshu.xcalendar.domain.usecase.event.GetEventsForDateRangeUseCase
 import com.debanshu.xcalendar.domain.usecase.holiday.GetHolidaysForYearUseCase
 import com.debanshu.xcalendar.domain.usecase.holiday.RefreshHolidaysUseCase
 import com.debanshu.xcalendar.domain.usecase.person.EnsureDefaultPeopleUseCase
+import com.debanshu.xcalendar.domain.usecase.settings.GetHolidayPreferencesUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.domain.util.DomainError
 import com.debanshu.xcalendar.ui.state.DateStateHolder
@@ -48,6 +49,7 @@ class CalendarViewModel(
     getEventsForDateRangeUseCase: GetEventsForDateRangeUseCase,
     private val getHolidaysForYearUseCase: GetHolidaysForYearUseCase,
     private val refreshHolidaysUseCase: RefreshHolidaysUseCase,
+    private val getHolidayPreferencesUseCase: GetHolidayPreferencesUseCase,
     private val ensureDefaultPeopleUseCase: EnsureDefaultPeopleUseCase,
     getCurrentUserUseCase: GetCurrentUserUseCase,
 ) : ViewModel() {
@@ -75,15 +77,16 @@ class CalendarViewModel(
     // Combine holidays from current year, previous year, and next year to avoid blinking on year transitions
     @OptIn(ExperimentalCoroutinesApi::class)
     private val holidays =
-        dateStateHolder.currentDateState
-            .map { it.selectedInViewMonth.year }
-            .distinctUntilChanged()
-            .flatMapLatest { year ->
+        combine(
+            dateStateHolder.currentDateState.map { it.selectedInViewMonth.year }.distinctUntilChanged(),
+            getHolidayPreferencesUseCase()
+        ) { year, prefs -> year to prefs }
+            .flatMapLatest { (year, prefs) ->
                 // Combine holidays from adjacent years to ensure smooth transitions
                 combine(
-                    getHolidaysForYearUseCase("IN", year - 1),
-                    getHolidaysForYearUseCase("IN", year),
-                    getHolidaysForYearUseCase("IN", year + 1),
+                    getHolidaysForYearUseCase(prefs.countryCode, prefs.region, year - 1),
+                    getHolidaysForYearUseCase(prefs.countryCode, prefs.region, year),
+                    getHolidaysForYearUseCase(prefs.countryCode, prefs.region, year + 1),
                 ) { prevYear, currentYear, nextYear ->
                     (prevYear + currentYear + nextYear).distinctBy { it.date }
                 }
@@ -129,11 +132,15 @@ class CalendarViewModel(
             calendars.distinctUntilChanged(),
             events.distinctUntilChanged(),
         ) { currentState, usersList, holidaysList, calendarsList, eventsList ->
+            val visibleEvents =
+                eventsList.filterNot { event ->
+                    isLegacyDemoEvent(event.id, event.calendarId)
+                }
             currentState.copy(
                 accounts = usersList.toImmutableList(),
                 holidays = holidaysList.toImmutableList(),
                 calendars = calendarsList.toImmutableList(),
-                events = eventsList.toImmutableList(),
+                events = visibleEvents.toImmutableList(),
                 isLoading = false,
             )
         }.distinctUntilChanged()
@@ -185,24 +192,25 @@ class CalendarViewModel(
     private suspend fun initializeHolidays() {
         runCatching {
             // Watch for year changes and refresh holidays for current and adjacent years
-            dateStateHolder.currentDateState
-                .map { it.selectedInViewMonth.year }
-                .distinctUntilChanged()
-                .flatMapLatest { year ->
+            combine(
+                dateStateHolder.currentDateState.map { it.selectedInViewMonth.year }.distinctUntilChanged(),
+                getHolidayPreferencesUseCase()
+            ) { year, prefs -> year to prefs }
+                .flatMapLatest { (year, prefs) ->
                     // Combine all three years to track which ones need refresh
                     combine(
-                        getHolidaysForYearUseCase("IN", year - 1).map { (year - 1) to it },
-                        getHolidaysForYearUseCase("IN", year).map { year to it },
-                        getHolidaysForYearUseCase("IN", year + 1).map { (year + 1) to it },
-                    ) { prev, current, next -> listOf(prev, current, next) }
+                        getHolidaysForYearUseCase(prefs.countryCode, prefs.region, year - 1).map { (year - 1) to it },
+                        getHolidaysForYearUseCase(prefs.countryCode, prefs.region, year).map { year to it },
+                        getHolidaysForYearUseCase(prefs.countryCode, prefs.region, year + 1).map { (year + 1) to it },
+                    ) { prev, current, next -> listOf(prev, current, next) to prefs }
                 }
-                .collect { yearHolidayPairs ->
+                .collect { (yearHolidayPairs, prefs) ->
                     yearHolidayPairs.forEach { (yr, holidays) ->
                         if (holidays.isEmpty()) {
                             // Launch in viewModelScope to avoid cancellation by flatMapLatest
                             viewModelScope.launch {
                                 runCatching {
-                                    refreshHolidaysUseCase("IN", yr)
+                                    refreshHolidaysUseCase(prefs.countryCode, prefs.region, yr)
                                 }.onFailure { exception ->
                                     AppLogger.w(exception) { "Failed to refresh holidays for year $yr" }
                                 }
@@ -262,4 +270,13 @@ class CalendarViewModel(
         super.onCleared()
         isInitialized.store(false)
     }
+
+    /**
+     * Legacy demo payload entries used "ev_*" and "cal_*" identifiers.
+     * Filter them from UI state so Google/local real data remains the default experience.
+     */
+    private fun isLegacyDemoEvent(
+        eventId: String,
+        calendarId: String,
+    ): Boolean = eventId.startsWith("ev_") && calendarId.startsWith("cal_")
 }

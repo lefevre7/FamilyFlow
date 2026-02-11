@@ -9,7 +9,7 @@
 
     <domain-config cleartextTrafficPermitted="false">
         <domain includeSubdomains="true">raw.githubusercontent.com</domain>
-        <domain includeSubdomains="true">calendarific.com</domain>
+        <domain includeSubdomains="true">kayaposoft.com</domain>
         <trust-anchors>
             <certificates src="system" />
             <certificates src="user" />

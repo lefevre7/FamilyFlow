@@ -36,6 +36,7 @@ fun MonthView(
     holidays: ImmutableList<Holiday>,
     isVisible: Boolean = true,
     onDayClick: (LocalDate) -> Unit,
+    onEventClick: (Event) -> Unit = {},
 ) {
     val firstDayOfMonth = LocalDate(month.year, month.month, 1)
     val firstDayOfWeek = firstDayOfMonth.dayOfWeek.ordinal + 1
@@ -125,6 +126,7 @@ fun MonthView(
                         isCurrentMonth = false,
                         isVisible = isVisible,
                         onDayClick = onDayClick,
+                        onEventClick = onEventClick,
                         itemSize = itemSize,
                         isTopLeft = index == 0,
                         isTopRight = index == 6,
@@ -149,6 +151,7 @@ fun MonthView(
                     isCurrentMonth = true,
                     isVisible = isVisible,
                     onDayClick = onDayClick,
+                    onEventClick = onEventClick,
                     itemSize =
                         if (cellIndex >= 35) {
                             itemSize.copy(height = itemSize.height + 70.dp)
@@ -177,6 +180,7 @@ fun MonthView(
                     isCurrentMonth = false,
                     isVisible = isVisible,
                     onDayClick = onDayClick,
+                    onEventClick = onEventClick,
                     itemSize =
                         if (cellIndex >= 35) {
                             itemSize.copy(height = itemSize.height + 70.dp)

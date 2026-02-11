@@ -232,11 +232,6 @@ buildkonfig {
     defaultConfigs {
         buildConfigField(
             FieldSpec.Type.STRING,
-            "API_KEY",
-            localProperties["API_KEY"]?.toString() ?: "",
-        )
-        buildConfigField(
-            FieldSpec.Type.STRING,
             "CLIENT_ID",
             localProperties["ClientId"]?.toString() ?: "",
         )

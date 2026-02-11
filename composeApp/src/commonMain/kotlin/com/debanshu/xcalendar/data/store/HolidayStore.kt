@@ -6,6 +6,7 @@ import com.debanshu.xcalendar.common.AppLogger
 import com.debanshu.xcalendar.common.DateRangeHelper
 import com.debanshu.xcalendar.common.model.asHoliday
 import com.debanshu.xcalendar.common.model.asHolidayEntity
+import com.debanshu.xcalendar.common.model.deduplicateHolidays
 import com.debanshu.xcalendar.data.localDataSource.HolidayDao
 import com.debanshu.xcalendar.data.remoteDataSource.HolidayApiService
 import com.debanshu.xcalendar.data.remoteDataSource.Result
@@ -18,9 +19,10 @@ import org.mobilenativefoundation.store.store5.StoreBuilder
 
 /**
  * Creates a Store for holidays that handles:
- * - Fetching from the Calendarific API
+ * - Fetching from the Enrico Holidays API (kayaposoft.com)
  * - Caching to Room database
  * - Converting between network, local, and domain models
+ * - Deduplicating holidays (preferring public_holiday over postal_holiday)
  */
 object HolidayStoreFactory {
 
@@ -39,18 +41,24 @@ object HolidayStoreFactory {
     private fun createFetcher(
         holidayApiService: HolidayApiService
     ): Fetcher<HolidayKey, List<Holiday>> = Fetcher.of { key ->
-        AppLogger.d { "Fetching holidays for ${key.countryCode}, year ${key.year}" }
-        when (val response = holidayApiService.getHolidays(key.countryCode, key.year)) {
+        AppLogger.d { "Fetching holidays for ${key.countryCode}/${key.region}, year ${key.year}" }
+        when (val response = holidayApiService.getHolidays(key.countryCode, key.region, key.year)) {
             is Result.Error -> {
                 AppLogger.e { "Failed to fetch holidays: ${response.error}" }
                 throw StoreException("Failed to fetch holidays: ${response.error}")
             }
             is Result.Success -> {
-                AppLogger.d { "Fetched ${response.data.response.holidays.size} holidays" }
+                val rawHolidays = response.data
+                    .filter { it.holidayType == "public_holiday" || it.holidayType == "postal_holiday" }
+                    .map { it.asHoliday(key.countryCode) }
+                
+                val deduplicated = rawHolidays.deduplicateHolidays()
+                
+                AppLogger.d { "Fetched ${response.data.size} holidays, filtered to ${rawHolidays.size}, deduplicated to ${deduplicated.size}" }
                 // Record the fetch time for cache freshness tracking
                 HolidayValidator.recordFetch(key)
-                // Convert network model to domain model
-                response.data.response.holidays.map { it.asHoliday() }
+                
+                deduplicated
             }
         }
     }

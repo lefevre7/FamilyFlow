@@ -9,7 +9,7 @@ import org.koin.core.annotation.Factory
 class GetHolidaysForYearUseCase(
     private val holidayRepository: IHolidayRepository
 ) {
-    operator fun invoke(countryCode: String, year: Int): Flow<List<Holiday>> =
-        holidayRepository.getHolidaysForYear(countryCode, year)
+    operator fun invoke(countryCode: String, region: String, year: Int): Flow<List<Holiday>> =
+        holidayRepository.getHolidaysForYear(countryCode, region, year)
 }
 

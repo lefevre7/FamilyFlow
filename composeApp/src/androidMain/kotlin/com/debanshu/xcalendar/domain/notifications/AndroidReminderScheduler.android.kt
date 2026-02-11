@@ -134,8 +134,18 @@ class AndroidReminderScheduler : ReminderScheduler {
     }
 
     override suspend fun cancelSummaries() {
-        cancelReminder(SUMMARY_ID_MORNING, ReminderConstants.ITEM_SUMMARY, ReminderConstants.KIND_SUMMARY)
-        cancelReminder(SUMMARY_ID_MIDDAY, ReminderConstants.ITEM_SUMMARY, ReminderConstants.KIND_SUMMARY)
+        cancelReminder(
+            SUMMARY_ID_MORNING,
+            ReminderConstants.ITEM_SUMMARY,
+            ReminderConstants.KIND_SUMMARY,
+            summarySlot = ReminderConstants.SUMMARY_MORNING,
+        )
+        cancelReminder(
+            SUMMARY_ID_MIDDAY,
+            ReminderConstants.ITEM_SUMMARY,
+            ReminderConstants.KIND_SUMMARY,
+            summarySlot = ReminderConstants.SUMMARY_MIDDAY,
+        )
     }
 
     fun scheduleSnooze(

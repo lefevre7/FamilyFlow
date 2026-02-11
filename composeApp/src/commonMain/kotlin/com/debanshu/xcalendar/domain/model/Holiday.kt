@@ -8,4 +8,6 @@ data class Holiday(
     val name: String,
     val date: Long,
     val countryCode: String,
+    val holidayType: String,
+    val translations: Map<String, String> = emptyMap()
 )

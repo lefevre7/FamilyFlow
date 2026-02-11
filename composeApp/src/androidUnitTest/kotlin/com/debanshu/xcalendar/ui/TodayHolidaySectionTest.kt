@@ -4,11 +4,10 @@ import android.app.Application
 import android.content.Context
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performScrollTo
 import androidx.test.core.app.ApplicationProvider
 import androidx.work.testing.WorkManagerTestInitHelper
 import com.debanshu.xcalendar.common.toLocalDateTime
-import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.test.buildTestDependencies
@@ -34,8 +33,7 @@ import kotlin.time.Clock
     sdk = [33],
     application = Application::class,
 )
-class TodayScreenGroupingTest {
-
+class TodayHolidaySectionTest {
     @get:Rule
     val composeRule = createIntentComposeRule<TestActivity>()
 
@@ -46,7 +44,7 @@ class TodayScreenGroupingTest {
         WorkManagerTestInitHelper.initializeTestWorkManager(context)
         val mom =
             Person(
-                id = "mom",
+                id = "person_mom",
                 name = "Mom",
                 role = PersonRole.MOM,
                 color = 0,
@@ -62,58 +60,32 @@ class TodayScreenGroupingTest {
     }
 
     @Test
-    fun showsMorningAfternoonEveningGroups() {
+    fun displaysHolidaySectionForSelectedDate() {
         val timeZone = TimeZone.currentSystemDefault()
-        val nowMillis = Clock.System.now().toEpochMilliseconds()
-        val today = nowMillis.toLocalDateTime(timeZone).date
+        val today = Clock.System.now().toEpochMilliseconds().toLocalDateTime(timeZone).date
         val dayStart = today.atStartOfDayIn(timeZone).toEpochMilliseconds()
-
-        val morning =
-            Event(
-                id = "event-morning",
-                calendarId = "local",
-                calendarName = "Family",
-                title = "Breakfast",
-                startTime = dayStart + 9 * 60 * 60 * 1000L,
-                endTime = dayStart + 10 * 60 * 60 * 1000L,
-                color = 0,
+        val holiday =
+            Holiday(
+                id = "holiday_today",
+                name = "Family Day",
+                date = dayStart,
+                countryCode = "US",
+                holidayType = "public_holiday",
             )
-        val afternoon =
-            Event(
-                id = "event-afternoon",
-                calendarId = "local",
-                calendarName = "Family",
-                title = "Playdate",
-                startTime = dayStart + 14 * 60 * 60 * 1000L,
-                endTime = dayStart + 15 * 60 * 60 * 1000L,
-                color = 0,
-            )
-        val evening =
-            Event(
-                id = "event-evening",
-                calendarId = "local",
-                calendarName = "Family",
-                title = "Dinner",
-                startTime = dayStart + 19 * 60 * 60 * 1000L,
-                endTime = dayStart + 20 * 60 * 60 * 1000L,
-                color = 0,
-            )
-
         val dateStateHolder = DateStateHolder().apply { updateSelectedDateState(today) }
 
         composeRule.setContent {
             XCalendarTheme {
                 TodayScreen(
                     dateStateHolder = dateStateHolder,
-                    events = persistentListOf(morning, afternoon, evening),
-                    holidays = persistentListOf(),
+                    events = persistentListOf(),
+                    holidays = persistentListOf(holiday),
                     isVisible = true,
                 )
             }
         }
 
-        composeRule.onNodeWithText("Morning").assertExists()
-        composeRule.onNodeWithText("Afternoon").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Evening").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Holidays").assertIsDisplayed()
+        composeRule.onNodeWithText("Family Day").assertIsDisplayed()
     }
 }

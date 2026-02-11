@@ -34,8 +34,10 @@ import com.debanshu.xcalendar.ui.screen.onboardingScreen.OnboardingScreen
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.viewmodel.EventViewModel
+import com.debanshu.xcalendar.domain.model.User
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
+import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
 import kotlinx.serialization.modules.SerializersModule
@@ -68,7 +70,17 @@ fun CalendarApp(
     val eventViewModel = koinViewModel<EventViewModel>()
     val dateStateHolder = koinInject<DateStateHolder>()
     val getReminderPreferencesUseCase = koinInject<GetReminderPreferencesUseCase>()
+    val getCurrentUserUseCase = koinInject<GetCurrentUserUseCase>()
     val reminderPreferences by remember { getReminderPreferencesUseCase() }.collectAsState(initial = ReminderPreferences())
+    val fallbackEventUser =
+        remember {
+            User(
+                id = getCurrentUserUseCase(),
+                name = "Mom",
+                email = "",
+                photoUrl = "",
+            )
+        }
     CalendarApp(
         calendarViewModel = calendarViewModel,
         eventViewModel = eventViewModel,
@@ -78,6 +90,7 @@ fun CalendarApp(
         showOnboardingInitially = showOnboardingInitially,
         onOnboardingCompleted = onOnboardingCompleted,
         reminderPreferences = reminderPreferences,
+        fallbackEventUser = fallbackEventUser,
     )
 }
 
@@ -91,6 +104,7 @@ private fun CalendarApp(
     showOnboardingInitially: Boolean = false,
     onOnboardingCompleted: (() -> Unit)? = null,
     reminderPreferences: ReminderPreferences = ReminderPreferences(),
+    fallbackEventUser: User,
 ) {
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventUiState by eventViewModel.uiState.collectAsState()
@@ -118,6 +132,7 @@ private fun CalendarApp(
         derivedStateOf { calendarUiState.calendars.filter { it.isVisible } }
     }
     val events = remember(calendarUiState.events) { calendarUiState.events }
+    val holidays = remember(calendarUiState.holidays) { calendarUiState.holidays }
 
     // Combine error messages from both ViewModels
     val displayError = calendarUiState.displayError ?: eventUiState.errorMessage
@@ -162,6 +177,8 @@ private fun CalendarApp(
                         backStack = backStack,
                         dateStateHolder = dateStateHolder,
                         events = events,
+                        holidays = holidays,
+                        onEventClick = { event -> eventViewModel.selectEvent(event) },
                     )
                     CalendarBottomNavigationBar(
                         modifier =
@@ -201,20 +218,18 @@ private fun CalendarApp(
                     )
                 }
                 if (showEventSheet) {
-                    calendarUiState.accounts.firstOrNull()?.let {
-                        AddEventDialog(
-                            user = it,
-                            calendars = visibleCalendars.toImmutableList(),
-                            selectedDate = dataState.selectedDate,
-                            onSave = { event ->
-                                eventViewModel.addEvent(event)
-                                showEventSheet = false
-                            },
-                            onDismiss = {
-                                showEventSheet = false
-                            },
-                        )
-                    }
+                    AddEventDialog(
+                        user = calendarUiState.accounts.firstOrNull() ?: fallbackEventUser,
+                        calendars = visibleCalendars.toImmutableList(),
+                        selectedDate = dataState.selectedDate,
+                        onSave = { event ->
+                            eventViewModel.addEvent(event)
+                            showEventSheet = false
+                        },
+                        onDismiss = {
+                            showEventSheet = false
+                        },
+                    )
                 }
 
                 selectedEvent?.let { selected ->

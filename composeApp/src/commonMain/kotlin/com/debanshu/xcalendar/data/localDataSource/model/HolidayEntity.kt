@@ -8,5 +8,7 @@ data class HolidayEntity(
     @PrimaryKey val id: String,
     val name: String,
     val date: Long,
-    val countryCode: String
+    val countryCode: String,
+    val holidayType: String,
+    val translations: String // JSON-encoded map for Room compatibility
 )

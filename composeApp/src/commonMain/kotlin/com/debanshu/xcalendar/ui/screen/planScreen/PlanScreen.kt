@@ -14,7 +14,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -38,6 +40,7 @@ import com.debanshu.xcalendar.common.toLocalDateTime
 import com.debanshu.xcalendar.domain.model.Calendar
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.FamilyLensSelection
+import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.InboxItem
 import com.debanshu.xcalendar.domain.model.InboxSource
 import com.debanshu.xcalendar.domain.model.InboxStatus
@@ -72,19 +75,19 @@ import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.platform.PlatformNotifier
 import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
+import com.debanshu.xcalendar.ui.components.core.ScheduleHolidayTag
 import com.debanshu.xcalendar.ui.screen.monthScreen.components.MonthView
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import com.debanshu.xcalendar.ui.state.LensStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.utils.DateTimeFormatter
 import kotlinx.collections.immutable.ImmutableList
-import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
-import kotlinx.datetime.LocalTime
 import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
 import kotlin.time.Clock
@@ -97,7 +100,9 @@ fun PlanScreen(
     modifier: Modifier = Modifier,
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
+    holidays: ImmutableList<Holiday>,
     isVisible: Boolean = true,
+    onEventClick: (Event) -> Unit = {},
 ) {
     if (!isVisible) return
 
@@ -317,10 +322,17 @@ fun PlanScreen(
 
         MonthOverviewSection(
             month = dateState.selectedInViewMonth,
+            currentDate = dateState.currentDate,
             events = filteredEvents,
+            holidays = holidays,
+            timeZone = timeZone,
             onDateClick = { date ->
                 dateStateHolder.updateSelectedDateState(date)
             },
+            onMonthChange = { nextMonth ->
+                dateStateHolder.updateSelectedInViewMonthState(nextMonth)
+            },
+            onEventClick = onEventClick,
         )
 
         YearAlertsSection(
@@ -651,28 +663,161 @@ private fun SuggestionUndoCard(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MonthOverviewSection(
     month: com.debanshu.xcalendar.common.model.YearMonth,
+    currentDate: LocalDate,
     events: ImmutableList<Event>,
+    holidays: ImmutableList<Holiday>,
+    timeZone: TimeZone,
     onDateClick: (LocalDate) -> Unit,
+    onMonthChange: (com.debanshu.xcalendar.common.model.YearMonth) -> Unit,
+    onEventClick: (Event) -> Unit,
 ) {
+    var selectedDay by remember(month) { mutableStateOf<LocalDate?>(null) }
+    val selectedDayEvents =
+        remember(selectedDay, events, timeZone) {
+            selectedDay?.let { day ->
+                val (dayStart, dayEnd) = dayWindow(day, timeZone)
+                events
+                    .filter { event -> overlaps(event.startTime, event.endTime, dayStart, dayEnd) }
+                    .sortedBy { it.startTime }
+            } ?: emptyList()
+        }
+    val selectedDayHolidays =
+        remember(selectedDay, holidays, timeZone) {
+            selectedDay?.let { day ->
+                holidays.filter { holiday ->
+                    holiday.date.toLocalDateTime(timeZone).date == day
+                }
+            } ?: emptyList()
+        }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text(
-            text = "Month overview",
+            text = "Month Overview",
             style = XCalendarTheme.typography.titleLarge,
             color = XCalendarTheme.colorScheme.onSurface,
         )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                text = formatMonthLabel(month),
+                style = XCalendarTheme.typography.bodyMedium,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                TextButton(onClick = { onMonthChange(month.plusMonths(-1)) }) { Text("<") }
+                TextButton(
+                    onClick = {
+                        onMonthChange(com.debanshu.xcalendar.common.model.YearMonth.from(currentDate))
+                    },
+                ) {
+                    Text("Today")
+                }
+                TextButton(onClick = { onMonthChange(month.plusMonths(1)) }) { Text(">") }
+            }
+        }
         Card(shape = RoundedCornerShape(16.dp)) {
             MonthView(
                 modifier = Modifier.fillMaxWidth().height(360.dp),
                 month = month,
                 events = events,
-                holidays = persistentListOf(),
+                holidays = holidays,
                 isVisible = true,
-                onDayClick = onDateClick,
+                onDayClick = { date ->
+                    onDateClick(date)
+                    selectedDay = date
+                },
+                onEventClick = onEventClick,
             )
         }
+    }
+
+    if (selectedDay != null) {
+        ModalBottomSheet(onDismissRequest = { selectedDay = null }) {
+            MonthDayDetailSheet(
+                date = selectedDay!!,
+                events = selectedDayEvents,
+                holidays = selectedDayHolidays,
+                timeZone = timeZone,
+                onEventClick = { event ->
+                    selectedDay = null
+                    onEventClick(event)
+                },
+            )
+        }
+    }
+}
+
+@Composable
+private fun MonthDayDetailSheet(
+    date: LocalDate,
+    events: List<Event>,
+    holidays: List<Holiday>,
+    timeZone: TimeZone,
+    onEventClick: (Event) -> Unit,
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            text = formatDateFull(date),
+            style = XCalendarTheme.typography.titleLarge,
+            color = XCalendarTheme.colorScheme.onSurface,
+        )
+        if (holidays.isNotEmpty()) {
+            holidays.forEach { holiday ->
+                ScheduleHolidayTag(name = holiday.name)
+            }
+        }
+        if (events.isEmpty() && holidays.isEmpty()) {
+            Text(
+                text = "No events for this day.",
+                style = XCalendarTheme.typography.bodyMedium,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+        } else {
+            events.forEach { event ->
+                Card(shape = RoundedCornerShape(12.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = event.title,
+                            style = XCalendarTheme.typography.titleMedium,
+                            color = XCalendarTheme.colorScheme.onSurface,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = formatEventTimeLabel(event, timeZone),
+                            style = XCalendarTheme.typography.bodySmall,
+                            color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                        )
+                        event.location?.takeIf { it.isNotBlank() }?.let { location ->
+                            Text(
+                                text = location,
+                                style = XCalendarTheme.typography.bodySmall,
+                                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        TextButton(onClick = { onEventClick(event) }) {
+                            Text("Open event")
+                        }
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -990,6 +1135,47 @@ private fun formatDateFull(date: LocalDate): String {
     val month = date.month.name.lowercase().replaceFirstChar { it.titlecase() }
     return "$dayOfWeek, ${date.day} $month"
 }
+
+private fun formatEventTimeLabel(
+    event: Event,
+    timeZone: TimeZone,
+): String {
+    if (event.isAllDay) return "All day"
+    val start = event.startTime.toLocalDateTime(timeZone)
+    val end = event.endTime.toLocalDateTime(timeZone)
+    return DateTimeFormatter.formatCompactTimeRange(start, end)
+}
+
+private fun dayWindow(
+    date: LocalDate,
+    timeZone: TimeZone,
+): Pair<Long, Long> {
+    val start =
+        kotlinx.datetime.LocalDateTime(
+            date.year,
+            date.month,
+            date.day,
+            0,
+            0,
+        ).toInstant(timeZone).toEpochMilliseconds()
+    val end =
+        kotlinx.datetime.LocalDateTime(
+            date.year,
+            date.month,
+            date.day,
+            23,
+            59,
+            59,
+        ).toInstant(timeZone).toEpochMilliseconds() + 1_000L
+    return start to end
+}
+
+private fun overlaps(
+    start: Long,
+    end: Long,
+    windowStart: Long,
+    windowEnd: Long,
+): Boolean = start < windowEnd && end > windowStart
 
 private fun slotLabel(index: Int): String =
     when (index) {

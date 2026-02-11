@@ -2,10 +2,11 @@ package com.debanshu.xcalendar.data.store
 
 /**
  * Key for fetching holidays from the Store.
- * Uniquely identifies a holidays request by country and year.
+ * Uniquely identifies a holidays request by country, region, and year.
  */
 data class HolidayKey(
     val countryCode: String,
+    val region: String,
     val year: Int
 )
 

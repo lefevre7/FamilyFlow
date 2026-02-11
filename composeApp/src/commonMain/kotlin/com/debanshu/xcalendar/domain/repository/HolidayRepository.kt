@@ -31,9 +31,10 @@ class HolidayRepository(
      */
     override suspend fun updateHolidays(
         countryCode: String,
+        region: String,
         year: Int,
-    ): Unit = safeCallOrThrow("updateHolidays($countryCode, $year)") {
-        val key = HolidayKey(countryCode, year)
+    ): Unit = safeCallOrThrow("updateHolidays($countryCode, $region, $year)") {
+        val key = HolidayKey(countryCode, region, year)
         // Force a fresh fetch from the network
         // Use filterIsInstance + first() to exit after the first successful data emission
         // This prevents hanging since Store5's stream() returns a hot Flow
@@ -41,13 +42,13 @@ class HolidayRepository(
             .filterIsInstance<StoreReadResponse.Data<List<Holiday>>>()
             .first()
             .also { response ->
-                logDebug { "Successfully refreshed holidays for $countryCode, $year: ${response.value.size} holidays" }
+                logDebug { "Successfully refreshed holidays for $countryCode/$region, $year: ${response.value.size} holidays" }
             }
         Unit
     }
 
     /**
-     * Gets holidays for a specific year and country.
+     * Gets holidays for a specific year and country/region.
      * 
      * Store5 automatically:
      * - Returns cached data immediately if available
@@ -56,12 +57,13 @@ class HolidayRepository(
      */
     override fun getHolidaysForYear(
         countryCode: String,
+        region: String,
         year: Int,
     ): Flow<List<Holiday>> {
-        val key = HolidayKey(countryCode, year)
+        val key = HolidayKey(countryCode, region, year)
         
         return safeFlow(
-            flowName = "getHolidaysForYear($countryCode, $year)",
+            flowName = "getHolidaysForYear($countryCode, $region, $year)",
             defaultValue = emptyList(),
             flow = holidayStore.stream(StoreReadRequest.cached(key, refresh = true))
                 .filterIsInstance<StoreReadResponse.Data<List<Holiday>>>()

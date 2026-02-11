@@ -7,8 +7,8 @@ import org.koin.core.annotation.Factory
 class RefreshHolidaysUseCase(
     private val holidayRepository: IHolidayRepository
 ) {
-    suspend operator fun invoke(countryCode: String, year: Int) {
-        holidayRepository.updateHolidays(countryCode, year)
+    suspend operator fun invoke(countryCode: String, region: String, year: Int) {
+        holidayRepository.updateHolidays(countryCode, region, year)
     }
 }
 

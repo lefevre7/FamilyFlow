@@ -9,6 +9,7 @@ import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberSaveableStateHolderNavEntryDecorator
 import androidx.navigation3.ui.NavDisplay
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.ui.screen.peopleScreen.PeopleScreen
 import com.debanshu.xcalendar.ui.screen.planScreen.PlanScreen
 import com.debanshu.xcalendar.ui.screen.settingsScreen.SettingsScreen
@@ -23,6 +24,8 @@ fun NavigationHost(
     backStack: NavBackStack<NavKey>,
     dateStateHolder: DateStateHolder,
     events: ImmutableList<Event>,
+    holidays: ImmutableList<Holiday>,
+    onEventClick: (Event) -> Unit = {},
 ) {
     // Track current screen for shared element visibility
     val currentScreen = backStack.lastOrNull()
@@ -42,7 +45,9 @@ fun NavigationHost(
                     TodayScreen(
                         dateStateHolder = dateStateHolder,
                         events = events,
+                        holidays = holidays,
                         isVisible = currentScreen == NavigableScreen.Today,
+                        onEventClick = onEventClick,
                         onNavigateToSettings = {
                             backStack.replaceLast(NavigableScreen.Settings)
                         },
@@ -52,7 +57,9 @@ fun NavigationHost(
                     WeekRealityScreen(
                         dateStateHolder = dateStateHolder,
                         events = events,
+                        holidays = holidays,
                         isVisible = currentScreen == NavigableScreen.Week,
+                        onEventClick = onEventClick,
                         onNavigateToSettings = {
                             backStack.replaceLast(NavigableScreen.Settings)
                         },
@@ -62,7 +69,9 @@ fun NavigationHost(
                     PlanScreen(
                         dateStateHolder = dateStateHolder,
                         events = events,
+                        holidays = holidays,
                         isVisible = currentScreen == NavigableScreen.Plan,
+                        onEventClick = onEventClick,
                     )
                 }
                 entry(NavigableScreen.People) {

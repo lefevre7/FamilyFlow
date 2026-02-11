@@ -51,6 +51,7 @@ fun DayCell(
     isCurrentMonth: Boolean,
     isVisible: Boolean = true,
     onDayClick: (LocalDate) -> Unit,
+    onEventClick: (Event) -> Unit = {},
     itemSize: DpSize,
     isTopLeft: Boolean = false,
     isTopRight: Boolean = false,
@@ -139,11 +140,12 @@ fun DayCell(
                 Spacer(modifier = Modifier.height(2.dp))
                 EventTag(
                     modifier =
-                        Modifier.sharedEventElement(
-                            eventId = event.id,
-                            type = SharedElementType.EventCard,
-                            isVisible = isVisible,
-                        ),
+                        Modifier
+                            .sharedEventElement(
+                                eventId = event.id,
+                                type = SharedElementType.EventCard,
+                                isVisible = isVisible,
+                            ).noRippleClickable { onEventClick(event) },
                     text = event.title,
                     color = Color(event.color),
                     textColor = XCalendarTheme.colorScheme.inverseOnSurface,

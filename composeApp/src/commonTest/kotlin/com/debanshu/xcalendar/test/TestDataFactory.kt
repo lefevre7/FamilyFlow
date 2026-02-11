@@ -152,18 +152,22 @@ object TestDataFactory {
         name: String = "Test Holiday",
         description: String? = "Test holiday description",
         date: Long = BASE_TIMESTAMP,
-        countryCode: String = "IN",
+        countryCode: String = "usa",
         type: String = "National holiday",
+        holidayType: String = "public_holiday",
+        translations: Map<String, String> = mapOf("en" to (description ?: "Test holiday description"))
     ) = Holiday(
         id = id,
         name = name,
         date = date,
         countryCode = countryCode,
+        holidayType = holidayType,
+        translations = translations
     )
 
     fun createHolidays(
         count: Int,
-        countryCode: String = "IN",
+        countryCode: String = "usa",
         startFromTimestamp: Long = BASE_TIMESTAMP,
     ): List<Holiday> =
         (0 until count).map { index ->

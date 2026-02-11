@@ -32,9 +32,10 @@ A family-first mental offloading scheduling app built for a mom with ADHD. The a
 
 **Setup**
 1. Use JDK 21.
-2. Add `ClientId` in `local.properties` for Google Calendar OAuth. `API_KEY` is optional if needed by integrations.
+2. Add `ClientId` in `local.properties` for Google Calendar OAuth.
 3. The Gemma model is bundled in `composeApp/src/androidMain/assets/llm/`. The app can also download the model on demand with a fallback URL to `media.githubusercontent.com`.
 4. Tesseract data is bundled in `composeApp/src/androidMain/assets/tessdata/eng.traineddata`.
+5. Holidays are fetched from Enrico Holidays API (kayaposoft.com) which is free and requires no API key. Default region is USA/Utah and can be configured in Settings.
 
 **Google OAuth Client Setup (Debug + Release)**
 1. Confirm package/redirect used by the app:

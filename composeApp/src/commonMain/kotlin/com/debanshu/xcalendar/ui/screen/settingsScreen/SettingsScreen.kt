@@ -6,7 +6,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -20,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,6 +42,7 @@ import com.debanshu.xcalendar.domain.usecase.settings.RescheduleRemindersUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.UpdateReminderPreferencesUseCase
 import com.debanshu.xcalendar.platform.PlatformFeatures
 import com.debanshu.xcalendar.platform.rememberNotificationPermissionController
+import com.debanshu.xcalendar.platform.rememberWidgetPinController
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import kotlinx.coroutines.launch
@@ -61,11 +65,15 @@ fun SettingsScreen(
     val updateReminderPreferencesUseCase = koinInject<UpdateReminderPreferencesUseCase>()
     val rescheduleRemindersUseCase = koinInject<RescheduleRemindersUseCase>()
     val notificationPermission = rememberNotificationPermissionController()
+    val widgetPinController = rememberWidgetPinController()
     val scope = rememberCoroutineScope()
     var modelStatus by remember { mutableStateOf(llmManager.getStatus()) }
     var downloadProgress by remember { mutableStateOf<Int?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
+    var widgetMessage by remember { mutableStateOf<String?>(null) }
     var calendarSourceCount by remember { mutableStateOf(0) }
+    var pendingReminderEnable by rememberSaveable { mutableStateOf(false) }
+    var reminderPermissionPrompted by rememberSaveable { mutableStateOf(false) }
     val reminderPreferences by remember { getReminderPreferencesUseCase() }
         .collectAsState(initial = ReminderPreferences())
 
@@ -78,8 +86,39 @@ fun SettingsScreen(
         calendarSourceCount = getAllCalendarSourcesUseCase().size
     }
 
+    LaunchedEffect(notificationPermission.isGranted, pendingReminderEnable) {
+        if (!pendingReminderEnable) return@LaunchedEffect
+        val canEnable =
+            !notificationPermission.isRequired || notificationPermission.isGranted
+        if (canEnable) {
+            updateReminderPreferencesUseCase.setRemindersEnabled(true)
+            rescheduleRemindersUseCase()
+            pendingReminderEnable = false
+        }
+    }
+
+    LaunchedEffect(
+        reminderPreferences.remindersEnabled,
+        notificationPermission.isRequired,
+        notificationPermission.isGranted,
+    ) {
+        if (!notificationPermission.isRequired) return@LaunchedEffect
+        if (notificationPermission.isGranted) {
+            reminderPermissionPrompted = false
+            return@LaunchedEffect
+        }
+        if (reminderPreferences.remindersEnabled && !reminderPermissionPrompted) {
+            reminderPermissionPrompted = true
+            notificationPermission.request()
+        }
+    }
+
     Column(
-        modifier = modifier.fillMaxSize().padding(16.dp),
+        modifier =
+            modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
         Text(
@@ -99,9 +138,11 @@ fun SettingsScreen(
             onToggleReminders = { enabled ->
                 scope.launch {
                     if (enabled && notificationPermission.isRequired && !notificationPermission.isGranted) {
+                        pendingReminderEnable = true
                         notificationPermission.request()
                         return@launch
                     }
+                    pendingReminderEnable = false
                     updateReminderPreferencesUseCase.setRemindersEnabled(enabled)
                     rescheduleRemindersUseCase()
                 }
@@ -148,6 +189,20 @@ fun SettingsScreen(
                 scope.launch {
                     updateReminderPreferencesUseCase.setTextScale(scale)
                 }
+            },
+        )
+
+        WidgetSection(
+            canRequestPin = widgetPinController.isSupported,
+            message = widgetMessage,
+            onRequestPin = {
+                val requested = widgetPinController.requestTodayWidgetPin()
+                widgetMessage =
+                    if (requested) {
+                        "Widget pin request sent. Choose where to place it on Home screen."
+                    } else {
+                        "Pin request unavailable on this launcher. Long press Home > Widgets > ADHD MOM."
+                    }
             },
         )
 
@@ -208,6 +263,53 @@ fun SettingsScreen(
                 }
             },
         )
+    }
+}
+
+@Composable
+private fun WidgetSection(
+    canRequestPin: Boolean,
+    message: String?,
+    onRequestPin: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "Home Screen Widget",
+            style = XCalendarTheme.typography.titleLarge,
+            color = XCalendarTheme.colorScheme.onSurface,
+        )
+        if (!PlatformFeatures.widgets.supported) {
+            StatusCard(PlatformFeatures.widgets.reason ?: "Widgets are not available on this platform.")
+            return
+        }
+
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "Pin the compact Today widget with Quick Task and Voice shortcuts.",
+                    style = XCalendarTheme.typography.bodyMedium,
+                    color = XCalendarTheme.colorScheme.onSurface,
+                )
+                TextButton(
+                    onClick = onRequestPin,
+                    enabled = canRequestPin,
+                ) {
+                    Text("Add widget to Home screen")
+                }
+                if (!canRequestPin) {
+                    Text(
+                        text = "If this button is disabled, long press Home > Widgets > ADHD MOM.",
+                        style = XCalendarTheme.typography.bodySmall,
+                        color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+
+        message?.let { StatusCard(it) }
     }
 }
 

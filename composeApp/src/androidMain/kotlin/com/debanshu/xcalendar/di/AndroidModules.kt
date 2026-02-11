@@ -14,8 +14,10 @@ import com.debanshu.xcalendar.domain.notifications.AndroidReminderScheduler
 import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
 import com.debanshu.xcalendar.domain.repository.EventPeopleRepository
 import com.debanshu.xcalendar.domain.repository.IEventPeopleRepository
+import com.debanshu.xcalendar.domain.repository.IHolidayPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.ILensPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
+import com.debanshu.xcalendar.domain.repository.HolidayPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.LensPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.ReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
@@ -34,6 +36,7 @@ val androidPlatformModule =
         single { GoogleTokenManager(get()) }
         single<GoogleTokenStore> { PlatformGoogleTokenStore() }
         single<IEventPeopleRepository> { EventPeopleRepository() }
+        single<IHolidayPreferencesRepository> { HolidayPreferencesRepository() }
         single<ILensPreferencesRepository> { LensPreferencesRepository() }
         single<IReminderPreferencesRepository> { ReminderPreferencesRepository() }
         single<ReminderScheduler> { AndroidReminderScheduler() }
