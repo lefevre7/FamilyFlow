@@ -22,7 +22,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -32,6 +31,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.model.Calendar
@@ -39,15 +39,18 @@ import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.OcrCandidateEvent
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
+import com.debanshu.xcalendar.domain.model.OcrStructuredResult
 import com.debanshu.xcalendar.domain.util.ImportCategory
 import com.debanshu.xcalendar.domain.util.ImportCategoryClassifier
 import com.debanshu.xcalendar.domain.util.OcrStructuringEngine
 import com.debanshu.xcalendar.domain.usecase.event.CreateEventUseCase
 import com.debanshu.xcalendar.domain.usecase.ocr.StructureOcrUseCase
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
+import com.debanshu.xcalendar.platform.OcrCaptureController
 import com.debanshu.xcalendar.platform.PlatformFeatures
 import com.debanshu.xcalendar.platform.rememberOcrCaptureController
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -70,51 +73,100 @@ fun OcrImportSheet(
     selectedCalendarId: String?,
     onCalendarSelected: (String) -> Unit,
     onDismiss: () -> Unit,
+    createEventOverride: (suspend (Event) -> Unit)? = null,
+    structureOcrOverride: (suspend (String, LocalDate, TimeZone) -> OcrStructuredResult)? = null,
+    peopleFlowOverride: Flow<List<Person>>? = null,
+    ocrControllerFactory: @Composable (
+        onResult: (String) -> Unit,
+        onError: (String) -> Unit,
+        onStatusChanged: (String?) -> Unit,
+    ) -> OcrCaptureController = { onResult, onError, onStatusChanged ->
+        rememberOcrCaptureController(
+            onResult = onResult,
+            onError = onError,
+            onStatusChanged = onStatusChanged,
+        )
+    },
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val timeZone = remember { TimeZone.currentSystemDefault() }
     val referenceDate = remember { Clock.System.now().toLocalDateTime(timeZone).date }
-    val createEventUseCase = koinInject<CreateEventUseCase>()
-    val structureOcrUseCase = koinInject<StructureOcrUseCase>()
-    val getPeopleUseCase = koinInject<GetPeopleUseCase>()
+    val createEventUseCase = if (createEventOverride == null) koinInject<CreateEventUseCase>() else null
+    val createEvent: suspend (Event) -> Unit =
+        createEventOverride ?: { event ->
+            createEventUseCase?.invoke(event)
+            Unit
+        }
+    val structureOcrUseCase = if (structureOcrOverride == null) koinInject<StructureOcrUseCase>() else null
+    val structureOcr: suspend (String, LocalDate, TimeZone) -> OcrStructuredResult =
+        structureOcrOverride ?: { rawText, referenceDate, zone ->
+            structureOcrUseCase?.invoke(rawText, referenceDate, zone)
+                ?: OcrStructuredResult(rawText = rawText, candidates = emptyList())
+        }
     val scope = rememberCoroutineScope()
-    val people by remember { getPeopleUseCase() }.collectAsState(initial = emptyList())
+    val getPeopleUseCase = if (peopleFlowOverride == null) koinInject<GetPeopleUseCase>() else null
+    val peopleFlow =
+        peopleFlowOverride ?: remember(getPeopleUseCase) { getPeopleUseCase?.invoke() ?: kotlinx.coroutines.flow.emptyFlow() }
+    val people by peopleFlow.collectAsState(initial = emptyList())
     val defaultPersonId = remember(people) { people.firstOrNull { it.role == PersonRole.MOM }?.id ?: people.firstOrNull()?.id }
 
     var rawText by rememberSaveable { mutableStateOf("") }
     var statusMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var isProcessing by rememberSaveable { mutableStateOf(false) }
+    var captureStatus by rememberSaveable { mutableStateOf<String?>(null) }
     var isStructuring by rememberSaveable { mutableStateOf(false) }
+    var isEditingRawText by rememberSaveable { mutableStateOf(false) }
 
     val editableCandidates = remember { mutableStateListOf<EditableCandidate>() }
 
-    val controller = rememberOcrCaptureController(
-        onResult = { text ->
+    val controller = ocrControllerFactory(
+        { text ->
             rawText = text
-            isProcessing = false
+            isEditingRawText = false
+            editableCandidates.clear()
+            statusMessage = null
+            captureStatus = null
         },
-        onError = { message ->
+        { message ->
             statusMessage = message
-            isProcessing = false
+            captureStatus = null
+        },
+        { status ->
+            captureStatus = status
         },
     )
 
-    LaunchedEffect(rawText, defaultPersonId) {
-        if (rawText.isBlank()) return@LaunchedEffect
-        isStructuring = true
-        statusMessage = null
-        val structured = structureOcrUseCase(rawText, referenceDate, timeZone)
-        val titleCounts = structured.candidates.groupingBy { normalizeCandidateTitle(it.title) }.eachCount()
-        editableCandidates.clear()
-        editableCandidates.addAll(
-            structured.candidates.map { candidate ->
-                candidate.toEditable(
-                    defaultPersonId = defaultPersonId,
-                    repeatedTitleCount = titleCounts[normalizeCandidateTitle(candidate.title)] ?: 0,
+    fun structureRawText() {
+        val textToStructure = rawText.trim()
+        if (textToStructure.isBlank()) {
+            statusMessage = "Capture or enter OCR text first."
+            return
+        }
+
+        scope.launch {
+            isStructuring = true
+            statusMessage = null
+            try {
+                val structured = structureOcr(textToStructure, referenceDate, timeZone)
+                val titleCounts = structured.candidates.groupingBy { normalizeCandidateTitle(it.title) }.eachCount()
+                editableCandidates.clear()
+                editableCandidates.addAll(
+                    structured.candidates.map { candidate ->
+                        candidate.toEditable(
+                            defaultPersonId = defaultPersonId,
+                            repeatedTitleCount = titleCounts[normalizeCandidateTitle(candidate.title)] ?: 0,
+                        )
+                    },
                 )
-            },
-        )
-        isStructuring = false
+                if (editableCandidates.isEmpty()) {
+                    statusMessage = "No events found. Edit OCR text and try structuring again."
+                }
+            } catch (_: Throwable) {
+                editableCandidates.clear()
+                statusMessage = "Could not structure OCR text. Try again."
+            } finally {
+                isStructuring = false
+            }
+        }
     }
 
     ModalBottomSheet(
@@ -153,7 +205,7 @@ fun OcrImportSheet(
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     TextButton(
                         onClick = {
-                            isProcessing = true
+                            statusMessage = null
                             controller.captureFromCamera()
                         },
                     ) {
@@ -161,7 +213,7 @@ fun OcrImportSheet(
                     }
                     TextButton(
                         onClick = {
-                            isProcessing = true
+                            statusMessage = null
                             controller.pickFromGallery()
                         },
                     ) {
@@ -170,8 +222,8 @@ fun OcrImportSheet(
                 }
             }
 
-            if (isProcessing) {
-                StatusCard("Processing image...")
+            captureStatus?.let { stage ->
+                StatusCard(stage)
             }
 
             if (isStructuring) {
@@ -181,7 +233,22 @@ fun OcrImportSheet(
             statusMessage?.let { StatusCard(it) }
 
             if (rawText.isNotBlank()) {
-                RawTextCard(rawText)
+                RawTextCard(
+                    text = rawText,
+                    isEditing = isEditingRawText,
+                    isStructuring = isStructuring,
+                    onToggleEdit = {
+                        isEditingRawText = !isEditingRawText
+                    },
+                    onTextChange = { updated ->
+                        rawText = updated
+                        editableCandidates.clear()
+                    },
+                    onStructure = {
+                        isEditingRawText = false
+                        structureRawText()
+                    },
+                )
             }
 
             if (editableCandidates.isNotEmpty()) {
@@ -233,7 +300,7 @@ fun OcrImportSheet(
                                     candidates = accepted,
                                     referenceDate = referenceDate,
                                     timeZone = timeZone,
-                                    createEventUseCase = createEventUseCase,
+                                    createEvent = createEvent,
                                 )
                                 statusMessage = errors
                                 if (errors == null) {
@@ -282,7 +349,14 @@ private fun CalendarSelector(
 }
 
 @Composable
-private fun RawTextCard(text: String) {
+private fun RawTextCard(
+    text: String,
+    isEditing: Boolean,
+    isStructuring: Boolean,
+    onToggleEdit: () -> Unit,
+    onTextChange: (String) -> Unit,
+    onStructure: () -> Unit,
+) {
     Card(shape = RoundedCornerShape(16.dp)) {
         Column(
             modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -294,15 +368,40 @@ private fun RawTextCard(text: String) {
                 color = XCalendarTheme.colorScheme.onSurface,
             )
             Text(
-                text = "Scroll to review full captured OCR text",
+                text = "Review OCR text, edit if needed, then structure with AI.",
                 style = XCalendarTheme.typography.bodySmall,
                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
             )
-            Text(
-                text = text,
-                style = XCalendarTheme.typography.bodySmall,
-                color = XCalendarTheme.colorScheme.onSurfaceVariant,
-            )
+            if (isEditing) {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = onTextChange,
+                    label = { Text("Edit OCR text") },
+                    modifier = Modifier.fillMaxWidth().testTag("ocrRawTextInput"),
+                    enabled = !isStructuring,
+                    minLines = 4,
+                )
+            } else {
+                Text(
+                    text = text,
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                TextButton(
+                    onClick = onToggleEdit,
+                    enabled = !isStructuring,
+                ) {
+                    Text(if (isEditing) "Done editing" else "Edit text")
+                }
+                TextButton(
+                    onClick = onStructure,
+                    enabled = text.isNotBlank() && !isStructuring,
+                ) {
+                    Text("Structure with AI")
+                }
+            }
         }
     }
 }
@@ -551,7 +650,7 @@ private suspend fun saveCandidates(
     candidates: List<EditableCandidate>,
     referenceDate: LocalDate,
     timeZone: TimeZone,
-    createEventUseCase: CreateEventUseCase,
+    createEvent: suspend (Event) -> Unit,
 ): String? {
     if (candidates.isEmpty()) return "No events selected."
     var hadError = false
@@ -560,7 +659,7 @@ private suspend fun saveCandidates(
         if (event == null) {
             hadError = true
         } else {
-            createEventUseCase(event)
+            createEvent(event)
         }
     }
     return if (hadError) {

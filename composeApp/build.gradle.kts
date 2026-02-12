@@ -83,6 +83,7 @@ kotlin {
             implementation(libs.glance.appwidget)
             implementation(libs.glance.material3)
             implementation(libs.work.runtime)
+            implementation(libs.ucrop)
         }
         val androidUnitTest by getting {
             dependencies {

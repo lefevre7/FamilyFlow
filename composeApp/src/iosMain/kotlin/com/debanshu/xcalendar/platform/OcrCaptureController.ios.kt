@@ -6,6 +6,7 @@ import androidx.compose.runtime.Composable
 actual fun rememberOcrCaptureController(
     onResult: (String) -> Unit,
     onError: (String) -> Unit,
+    onStatusChanged: (String?) -> Unit,
 ): OcrCaptureController {
     return object : OcrCaptureController {
         override val isAvailable: Boolean = false

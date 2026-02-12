@@ -12,4 +12,5 @@ interface OcrCaptureController {
 expect fun rememberOcrCaptureController(
     onResult: (String) -> Unit,
     onError: (String) -> Unit,
+    onStatusChanged: (String?) -> Unit = {},
 ): OcrCaptureController
