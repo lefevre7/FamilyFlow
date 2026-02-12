@@ -24,13 +24,17 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.llm.LlmModelSource
 import com.debanshu.xcalendar.domain.llm.LlmModelStatus
 import com.debanshu.xcalendar.domain.llm.LocalLlmManager
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
+import com.debanshu.xcalendar.domain.model.VoiceDiagnosticEntry
+import com.debanshu.xcalendar.domain.repository.IVoiceDiagnosticsRepository
 import com.debanshu.xcalendar.domain.sync.SyncConflict
 import com.debanshu.xcalendar.domain.sync.SyncResolutionAction
 import com.debanshu.xcalendar.domain.usecase.calendarSource.GetAllCalendarSourcesUseCase
@@ -41,12 +45,16 @@ import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseC
 import com.debanshu.xcalendar.domain.usecase.settings.RescheduleRemindersUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.UpdateReminderPreferencesUseCase
 import com.debanshu.xcalendar.platform.PlatformFeatures
+import com.debanshu.xcalendar.platform.PlatformNotifier
 import com.debanshu.xcalendar.platform.rememberNotificationPermissionController
 import com.debanshu.xcalendar.platform.rememberWidgetPinController
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import org.koin.compose.koinInject
+import kotlin.time.Instant
 
 @Composable
 fun SettingsScreen(
@@ -56,6 +64,7 @@ fun SettingsScreen(
     if (!isVisible) return
 
     val llmManager = koinInject<LocalLlmManager>()
+    val voiceDiagnosticsRepository = koinInject<IVoiceDiagnosticsRepository>()
     val getAllGoogleAccountsUseCase = koinInject<GetAllGoogleAccountsUseCase>()
     val getAllCalendarSourcesUseCase = koinInject<GetAllCalendarSourcesUseCase>()
     val syncGoogleCalendarsUseCase = koinInject<SyncGoogleCalendarsUseCase>()
@@ -64,13 +73,17 @@ fun SettingsScreen(
     val getReminderPreferencesUseCase = koinInject<GetReminderPreferencesUseCase>()
     val updateReminderPreferencesUseCase = koinInject<UpdateReminderPreferencesUseCase>()
     val rescheduleRemindersUseCase = koinInject<RescheduleRemindersUseCase>()
+    val notifier = koinInject<PlatformNotifier>()
     val notificationPermission = rememberNotificationPermissionController()
     val widgetPinController = rememberWidgetPinController()
+    @Suppress("DEPRECATION")
+    val clipboardManager = LocalClipboardManager.current
     val scope = rememberCoroutineScope()
     var modelStatus by remember { mutableStateOf(llmManager.getStatus()) }
     var downloadProgress by remember { mutableStateOf<Int?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var widgetMessage by remember { mutableStateOf<String?>(null) }
+    var diagnosticsMessage by remember { mutableStateOf<String?>(null) }
     var calendarSourceCount by remember { mutableStateOf(0) }
     var pendingReminderEnable by rememberSaveable { mutableStateOf(false) }
     var reminderPermissionPrompted by rememberSaveable { mutableStateOf(false) }
@@ -79,6 +92,9 @@ fun SettingsScreen(
 
     val googleAccounts by remember { getAllGoogleAccountsUseCase() }.collectAsState(initial = emptyList())
     val conflicts by conflictStateHolder.conflicts.collectAsState()
+    val diagnosticsEnabled by remember { voiceDiagnosticsRepository.diagnosticsEnabled }.collectAsState(initial = true)
+    val diagnosticEntries by remember { voiceDiagnosticsRepository.entries }.collectAsState(initial = emptyList())
+    val latestDiagnosticPayload = remember(diagnosticEntries) { buildLatestVoiceDiagnosticPayload(diagnosticEntries) }
 
     LaunchedEffect(Unit) {
         modelStatus = llmManager.getStatus()
@@ -248,6 +264,42 @@ fun SettingsScreen(
             },
         )
 
+        VoiceDiagnosticsSection(
+            enabled = diagnosticsEnabled,
+            entries = diagnosticEntries,
+            message = diagnosticsMessage,
+            hasLatestAttempt = !latestDiagnosticPayload.isNullOrBlank(),
+            onToggleEnabled = { enabled ->
+                scope.launch {
+                    voiceDiagnosticsRepository.setDiagnosticsEnabled(enabled)
+                    diagnosticsMessage =
+                        if (enabled) {
+                            "Voice diagnostics enabled."
+                        } else {
+                            "Voice diagnostics disabled."
+                        }
+                }
+            },
+            onClear = {
+                scope.launch {
+                    voiceDiagnosticsRepository.clear()
+                    diagnosticsMessage = "Voice diagnostics cleared."
+                }
+            },
+            onCopyLatest = {
+                val payload = latestDiagnosticPayload ?: return@VoiceDiagnosticsSection
+                clipboardManager.setText(AnnotatedString(payload))
+                diagnosticsMessage = "Copied latest attempt diagnostics."
+            },
+            onShareLatest = {
+                val payload = latestDiagnosticPayload ?: return@VoiceDiagnosticsSection
+                notifier.shareText(
+                    subject = "ADHD MOM - Voice diagnostics",
+                    text = payload,
+                )
+            },
+        )
+
         GoogleSyncSection(
             accountCount = googleAccounts.size,
             calendarCount = calendarSourceCount,
@@ -376,6 +428,137 @@ private fun OfflineAiSection(
         }
 
         message?.let { StatusCard(it) }
+    }
+}
+
+@Composable
+internal fun VoiceDiagnosticsSection(
+    enabled: Boolean,
+    entries: List<VoiceDiagnosticEntry>,
+    message: String?,
+    hasLatestAttempt: Boolean,
+    onToggleEnabled: (Boolean) -> Unit,
+    onClear: () -> Unit,
+    onCopyLatest: () -> Unit,
+    onShareLatest: () -> Unit,
+) {
+    val sortedEntries = remember(entries) { entries.sortedByDescending { it.timestampMillis } }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text(
+            text = "Voice + Local AI diagnostics",
+            style = XCalendarTheme.typography.titleLarge,
+            color = XCalendarTheme.colorScheme.onSurface,
+        )
+        Card(shape = RoundedCornerShape(16.dp)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                ToggleRow(
+                    label = "Enable detailed diagnostics",
+                    checked = enabled,
+                    onCheckedChange = onToggleEnabled,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = onCopyLatest, enabled = hasLatestAttempt) {
+                        Text("Copy latest attempt")
+                    }
+                    TextButton(onClick = onShareLatest, enabled = hasLatestAttempt) {
+                        Text("Share latest attempt")
+                    }
+                    TextButton(onClick = onClear, enabled = sortedEntries.isNotEmpty()) {
+                        Text("Clear")
+                    }
+                }
+                if (sortedEntries.isEmpty()) {
+                    Text(
+                        text = "No diagnostics logged yet.",
+                        style = XCalendarTheme.typography.bodySmall,
+                        color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    sortedEntries.forEach { entry ->
+                        VoiceDiagnosticsEntryCard(entry)
+                    }
+                }
+            }
+        }
+        message?.let { StatusCard(it) }
+    }
+}
+
+@Composable
+internal fun VoiceDiagnosticsEntryCard(entry: VoiceDiagnosticEntry) {
+    Card(shape = RoundedCornerShape(12.dp)) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text = "${entry.source.name} • ${entry.step.name} • ${entry.level.name}",
+                style = XCalendarTheme.typography.labelLarge,
+                color = XCalendarTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "${formatDiagnosticTimestamp(entry.timestampMillis)} • Session ${entry.sessionId}",
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = entry.message,
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurface,
+            )
+            entry.attemptIndex?.let {
+                Text(
+                    text = "Attempt: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            entry.taskCount?.let {
+                Text(
+                    text = "Tasks: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            entry.transcript?.let {
+                Text(
+                    text = "Transcript: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurface,
+                )
+            }
+            entry.llmPrompt?.let {
+                Text(
+                    text = "Prompt: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurface,
+                )
+            }
+            entry.llmRawResponse?.let {
+                Text(
+                    text = "Raw output: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurface,
+                )
+            }
+            entry.llmExtractedJson?.let {
+                Text(
+                    text = "Extracted JSON: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.onSurface,
+                )
+            }
+            entry.errorMessage?.let {
+                Text(
+                    text = "Error: $it",
+                    style = XCalendarTheme.typography.bodySmall,
+                    color = XCalendarTheme.colorScheme.error,
+                )
+            }
+        }
     }
 }
 
@@ -583,6 +766,39 @@ private fun formatBytes(bytes: Long): String {
     if (bytes <= 0L) return "Unknown"
     val mb = bytes / (1024.0 * 1024.0)
     return String.format("%.1f MB", mb)
+}
+
+internal fun buildLatestVoiceDiagnosticPayload(entries: List<VoiceDiagnosticEntry>): String? {
+    if (entries.isEmpty()) return null
+    val latestSessionId = entries.maxByOrNull { it.timestampMillis }?.sessionId ?: return null
+    val sessionEntries =
+        entries.filter { it.sessionId == latestSessionId }.sortedBy { it.timestampMillis }
+    if (sessionEntries.isEmpty()) return null
+
+    return buildString {
+        appendLine("ADHD MOM voice diagnostics")
+        appendLine("Session: $latestSessionId")
+        sessionEntries.forEach { entry ->
+            appendLine("")
+            appendLine("[${formatDiagnosticTimestamp(entry.timestampMillis)}] ${entry.source.name} ${entry.step.name} ${entry.level.name}")
+            appendLine("Message: ${entry.message}")
+            entry.attemptIndex?.let { appendLine("Attempt: $it") }
+            entry.taskCount?.let { appendLine("Tasks: $it") }
+            entry.transcript?.let { appendLine("Transcript: $it") }
+            entry.llmPrompt?.let { appendLine("Prompt: $it") }
+            entry.llmRawResponse?.let { appendLine("Raw output: $it") }
+            entry.llmExtractedJson?.let { appendLine("Extracted JSON: $it") }
+            entry.errorMessage?.let { appendLine("Error: $it") }
+        }
+    }.trim()
+}
+
+internal fun formatDiagnosticTimestamp(timestampMillis: Long): String {
+    val dateTime = Instant.fromEpochMilliseconds(timestampMillis).toLocalDateTime(TimeZone.currentSystemDefault())
+    fun Int.twoDigits(): String = toString().padStart(2, '0')
+    val month = dateTime.date.month.ordinal + 1
+    return "${dateTime.date.year}-${month.twoDigits()}-${dateTime.date.day.twoDigits()} " +
+        "${dateTime.hour.twoDigits()}:${dateTime.minute.twoDigits()}:${dateTime.second.twoDigits()}"
 }
 
 @Composable

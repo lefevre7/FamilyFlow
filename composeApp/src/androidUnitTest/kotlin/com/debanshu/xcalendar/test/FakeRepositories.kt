@@ -8,6 +8,7 @@ import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
 import com.debanshu.xcalendar.domain.model.Routine
 import com.debanshu.xcalendar.domain.model.Task
+import com.debanshu.xcalendar.domain.model.VoiceDiagnosticEntry
 import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
 import com.debanshu.xcalendar.domain.repository.IInboxRepository
 import com.debanshu.xcalendar.domain.repository.ILensPreferencesRepository
@@ -15,6 +16,7 @@ import com.debanshu.xcalendar.domain.repository.IPersonRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
 import com.debanshu.xcalendar.domain.repository.ITaskRepository
+import com.debanshu.xcalendar.domain.repository.IVoiceDiagnosticsRepository
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
 import com.debanshu.xcalendar.domain.llm.LocalLlmManager
 import com.debanshu.xcalendar.platform.PlatformNotifier
@@ -22,6 +24,7 @@ import com.debanshu.xcalendar.platform.VoiceCaptureController
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 
 class FakePersonRepository(people: List<Person> = emptyList()) : IPersonRepository {
     private val peopleFlow = MutableStateFlow(people)
@@ -132,6 +135,36 @@ class FakeLensPreferencesRepository : ILensPreferencesRepository {
 
     override suspend fun updateSelection(selection: FamilyLensSelection) {
         state.value = selection
+    }
+}
+
+class FakeVoiceDiagnosticsRepository : IVoiceDiagnosticsRepository {
+    private val enabledState = MutableStateFlow(true)
+    private val entriesState = MutableStateFlow<List<VoiceDiagnosticEntry>>(emptyList())
+
+    override val diagnosticsEnabled: Flow<Boolean> = enabledState
+    override val entries: Flow<List<VoiceDiagnosticEntry>> = entriesState
+
+    override suspend fun isDiagnosticsEnabled(): Boolean = enabledState.value
+
+    override suspend fun setDiagnosticsEnabled(enabled: Boolean) {
+        enabledState.value = enabled
+    }
+
+    override suspend fun append(entry: VoiceDiagnosticEntry) {
+        entriesState.update { current ->
+            (current + entry).takeLast(MAX_ENTRIES)
+        }
+    }
+
+    override suspend fun clear() {
+        entriesState.value = emptyList()
+    }
+
+    fun entriesValue(): List<VoiceDiagnosticEntry> = entriesState.value
+
+    private companion object {
+        private const val MAX_ENTRIES = 200
     }
 }
 

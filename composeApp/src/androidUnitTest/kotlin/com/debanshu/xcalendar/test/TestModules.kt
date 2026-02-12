@@ -10,7 +10,9 @@ import com.debanshu.xcalendar.domain.repository.IPersonRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
 import com.debanshu.xcalendar.domain.repository.ITaskRepository
+import com.debanshu.xcalendar.domain.repository.IVoiceDiagnosticsRepository
 import com.debanshu.xcalendar.domain.usecase.inbox.CreateInboxItemUseCase
+import com.debanshu.xcalendar.domain.usecase.inbox.ProcessVoiceNoteUseCase
 import com.debanshu.xcalendar.domain.usecase.inbox.StructureBrainDumpUseCase
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
@@ -34,6 +36,7 @@ data class TestDependencies(
     val reminderScheduler: FakeReminderScheduler,
     val widgetUpdater: FakeWidgetUpdater,
     val notifier: FakeNotifier,
+    val voiceDiagnosticsRepository: FakeVoiceDiagnosticsRepository,
 )
 
 fun buildTestDependencies(
@@ -46,6 +49,7 @@ fun buildTestDependencies(
     val reminderScheduler = FakeReminderScheduler()
     val widgetUpdater = FakeWidgetUpdater()
     val notifier = FakeNotifier()
+    val voiceDiagnosticsRepository = FakeVoiceDiagnosticsRepository()
 
     val module =
         module {
@@ -55,6 +59,7 @@ fun buildTestDependencies(
             single<IInboxRepository> { inboxRepository }
             single<IReminderPreferencesRepository> { FakeReminderPreferencesRepository() }
             single<ILensPreferencesRepository> { FakeLensPreferencesRepository() }
+            single<IVoiceDiagnosticsRepository> { voiceDiagnosticsRepository }
             single<ReminderScheduler> { reminderScheduler }
             single<WidgetUpdater> { widgetUpdater }
             single<PlatformNotifier> { notifier }
@@ -68,6 +73,7 @@ fun buildTestDependencies(
             single { UpdateTaskUseCase(get(), get(), get(), get()) }
             single { CreateInboxItemUseCase(get()) }
             single { StructureBrainDumpUseCase(get()) }
+            single { ProcessVoiceNoteUseCase(get(), get(), get(), get()) }
             single { TimerStateHolder() }
             single { LensStateHolder(get()) }
             single { SyncConflictStateHolder() }
@@ -80,5 +86,6 @@ fun buildTestDependencies(
         reminderScheduler = reminderScheduler,
         widgetUpdater = widgetUpdater,
         notifier = notifier,
+        voiceDiagnosticsRepository = voiceDiagnosticsRepository,
     )
 }

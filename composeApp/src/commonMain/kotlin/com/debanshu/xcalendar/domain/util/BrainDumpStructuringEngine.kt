@@ -11,7 +11,8 @@ import kotlinx.serialization.json.Json
 object BrainDumpStructuringEngine {
     private val json = Json {
         ignoreUnknownKeys = true
-        isLenient = false
+        isLenient = true
+        coerceInputValues = true
     }
 
     fun structure(rawText: String): BrainDumpStructuredResult {
@@ -26,13 +27,20 @@ object BrainDumpStructuringEngine {
             val response = json.decodeFromString<BrainDumpLlmResponse>(rawText)
             val tasks =
                 response.tasks.mapNotNull { task ->
-                    val title = task.title.trim()
+                    val title = task.title?.trim().orEmpty()
                     if (title.isEmpty()) return@mapNotNull null
+                    val notes =
+                        buildList {
+                            task.notes?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it) }
+                            task.dueDate?.trim()?.takeIf { it.isNotEmpty() }?.let { add("Due date: $it") }
+                            task.dueTime?.trim()?.takeIf { it.isNotEmpty() }?.let { add("Due time: $it") }
+                            task.assignee?.trim()?.takeIf { it.isNotEmpty() }?.let { add("Assignee: $it") }
+                        }.joinToString("\n").ifBlank { null }
                     BrainDumpTaskDraft(
                         title = title,
                         priority = task.priority?.toPriority(),
                         energy = task.energy?.toEnergy(),
-                        notes = task.notes?.trim()?.ifBlank { null },
+                        notes = notes,
                     )
                 }
             BrainDumpStructuredResult(rawText = rawText, tasks = tasks)
@@ -82,8 +90,11 @@ data class BrainDumpLlmResponse(
 
 @Serializable
 data class BrainDumpLlmTask(
-    val title: String,
+    val title: String? = null,
     val priority: String? = null,
     val energy: String? = null,
     val notes: String? = null,
+    val dueDate: String? = null,
+    val dueTime: String? = null,
+    val assignee: String? = null,
 )

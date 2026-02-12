@@ -48,9 +48,6 @@ import com.debanshu.xcalendar.common.toLocalDateTime
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.FamilyLensSelection
 import com.debanshu.xcalendar.domain.model.Holiday
-import com.debanshu.xcalendar.domain.model.InboxItem
-import com.debanshu.xcalendar.domain.model.InboxSource
-import com.debanshu.xcalendar.domain.model.InboxStatus
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.Routine
@@ -61,13 +58,12 @@ import com.debanshu.xcalendar.domain.model.Task
 import com.debanshu.xcalendar.domain.model.TaskEnergy
 import com.debanshu.xcalendar.domain.model.TaskPriority
 import com.debanshu.xcalendar.domain.model.TaskStatus
-import com.debanshu.xcalendar.domain.model.TaskType
+import com.debanshu.xcalendar.domain.model.VoiceCaptureSource
 import com.debanshu.xcalendar.domain.usecase.event.UpdateEventUseCase
-import com.debanshu.xcalendar.domain.usecase.inbox.CreateInboxItemUseCase
-import com.debanshu.xcalendar.domain.usecase.inbox.StructureBrainDumpUseCase
+import com.debanshu.xcalendar.domain.usecase.inbox.ProcessVoiceNoteUseCase
+import com.debanshu.xcalendar.domain.usecase.inbox.VoiceNoteProcessResult
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
-import com.debanshu.xcalendar.domain.usecase.task.CreateTaskUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
@@ -92,8 +88,6 @@ import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import org.koin.mp.KoinPlatform
 import kotlin.time.Clock
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 import com.debanshu.xcalendar.domain.model.effectivePersonId
 
 private const val NOW_WINDOW_MINUTES = 30
@@ -106,7 +100,6 @@ private enum class DaySection {
     EVENING,
 }
 
-@OptIn(ExperimentalUuidApi::class)
 @Composable
 fun TodayScreen(
     modifier: Modifier = Modifier,
@@ -128,9 +121,7 @@ fun TodayScreen(
     val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val getTasksUseCase = koinInject<GetTasksUseCase>()
     val getRoutinesUseCase = koinInject<GetRoutinesUseCase>()
-    val createTaskUseCase = koinInject<CreateTaskUseCase>()
-    val createInboxItemUseCase = koinInject<CreateInboxItemUseCase>()
-    val structureBrainDumpUseCase = koinInject<StructureBrainDumpUseCase>()
+    val processVoiceNoteUseCase = koinInject<ProcessVoiceNoteUseCase>()
     val timerStateHolder = koinInject<TimerStateHolder>()
     val lensStateHolder = koinInject<LensStateHolder>()
     val conflictStateHolder = koinInject<SyncConflictStateHolder>()
@@ -178,62 +169,38 @@ fun TodayScreen(
             if (trimmed.isNotEmpty()) {
                 scope.launch {
                     isVoiceProcessing = true
-                    notifier.showToast("Captured. Structuring with local AI...")
-                    runCatching {
-                        val structured = structureBrainDumpUseCase.structureWithLlmRetries(trimmed, retryCount = 2)
-                        if (structured == null || structured.tasks.isEmpty()) {
-                            createInboxItemUseCase(
-                                InboxItem(
-                                    id = Uuid.random().toString(),
+                    notifier.showToast("Captured. Processing voice note...")
+                    try {
+                        when (
+                            val result =
+                                processVoiceNoteUseCase(
                                     rawText = trimmed,
-                                    source = InboxSource.VOICE,
-                                    status = InboxStatus.NEW,
-                                    createdAt = Clock.System.now().toEpochMilliseconds(),
+                                    source = VoiceCaptureSource.TODAY_QUICK_CAPTURE,
                                     personId = momId,
                                 )
-                            )
-                            notifier.showToast("Couldn't extract tasks. Saved to Brain Dump.")
-                            return@runCatching
-                        }
-
-                        val now = Clock.System.now().toEpochMilliseconds()
-                        val drafts = structured.tasks
-
-                        drafts.forEach { draft ->
-                            createTaskUseCase(
-                                Task(
-                                    id = Uuid.random().toString(),
-                                    title = draft.title,
-                                    notes = draft.notes,
-                                    priority = draft.priority ?: TaskPriority.SHOULD,
-                                    energy = draft.energy ?: TaskEnergy.MEDIUM,
-                                    type = TaskType.FLEXIBLE,
-                                    assignedToPersonId = momId,
-                                    affectedPersonIds = momId?.let { listOf(it) } ?: emptyList(),
-                                    createdAt = now,
-                                    updatedAt = now,
+                        ) {
+                            is VoiceNoteProcessResult.Success -> {
+                                val count = result.taskCount
+                                val baseMessage =
+                                    if (count == 1) {
+                                        "Added 1 task from voice note"
+                                    } else {
+                                        "Added $count tasks from voice note"
+                                    }
+                                notifier.showToast(
+                                    if (result.usedHeuristicFallback) {
+                                        "$baseMessage using heuristic fallback"
+                                    } else {
+                                        baseMessage
+                                    },
                                 )
-                            )
+                            }
+
+                            is VoiceNoteProcessResult.Failure -> {
+                                notifier.showToast(result.reason.userMessage)
+                            }
                         }
-
-                        createInboxItemUseCase(
-                            InboxItem(
-                                id = Uuid.random().toString(),
-                                rawText = trimmed,
-                                source = InboxSource.VOICE,
-                                status = InboxStatus.PROCESSED,
-                                createdAt = now,
-                                personId = momId,
-                            )
-                        )
-
-                        val count = drafts.size
-                        notifier.showToast(
-                            if (count == 1) "Added 1 task from voice note" else "Added $count tasks from voice note"
-                        )
-                    }.onFailure {
-                        notifier.showToast("Unable to process voice note.")
-                    }.also {
+                    } finally {
                         isVoiceProcessing = false
                     }
                 }

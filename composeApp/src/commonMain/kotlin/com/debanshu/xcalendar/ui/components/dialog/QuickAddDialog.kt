@@ -37,17 +37,15 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.debanshu.xcalendar.domain.model.InboxItem
-import com.debanshu.xcalendar.domain.model.InboxSource
-import com.debanshu.xcalendar.domain.model.InboxStatus
 import com.debanshu.xcalendar.domain.model.Person
 import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.Task
 import com.debanshu.xcalendar.domain.model.TaskEnergy
 import com.debanshu.xcalendar.domain.model.TaskPriority
 import com.debanshu.xcalendar.domain.model.TaskType
-import com.debanshu.xcalendar.domain.usecase.inbox.CreateInboxItemUseCase
-import com.debanshu.xcalendar.domain.usecase.inbox.StructureBrainDumpUseCase
+import com.debanshu.xcalendar.domain.model.VoiceCaptureSource
+import com.debanshu.xcalendar.domain.usecase.inbox.ProcessVoiceNoteUseCase
+import com.debanshu.xcalendar.domain.usecase.inbox.VoiceNoteProcessResult
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.task.CreateTaskUseCase
 import com.debanshu.xcalendar.platform.PlatformFeatures
@@ -81,8 +79,7 @@ fun QuickAddSheet(
 
     val getPeopleUseCase = koinInject<GetPeopleUseCase>()
     val createTaskUseCase = koinInject<CreateTaskUseCase>()
-    val createInboxItemUseCase = koinInject<CreateInboxItemUseCase>()
-    val structureBrainDumpUseCase = koinInject<StructureBrainDumpUseCase>()
+    val processVoiceNoteUseCase = koinInject<ProcessVoiceNoteUseCase>()
     val notifier = koinInject<PlatformNotifier>()
 
     val people by remember { getPeopleUseCase() }.collectAsState(initial = emptyList())
@@ -94,8 +91,6 @@ fun QuickAddSheet(
     var voiceStatus by rememberSaveable { mutableStateOf<String?>(null) }
     var capturedVoiceText by rememberSaveable { mutableStateOf<String?>(null) }
     var isVoiceProcessing by rememberSaveable { mutableStateOf(false) }
-    var voiceFallbackText by rememberSaveable { mutableStateOf<String?>(null) }
-    var isSavingVoiceFallback by rememberSaveable { mutableStateOf(false) }
     var selectedPersonId by rememberSaveable { mutableStateOf(defaultPersonId) }
 
     LaunchedEffect(defaultPersonId, selectedPersonId) {
@@ -109,67 +104,40 @@ fun QuickAddSheet(
             val trimmed = text.trim()
             if (trimmed.isNotEmpty()) {
                 capturedVoiceText = trimmed
-                voiceFallbackText = null
                 scope.launch {
                     isVoiceProcessing = true
-                    voiceStatus = "Captured. Structuring with local AI..."
-                    runCatching {
-                        val structured = structureBrainDumpUseCase.structureWithLlmRetries(trimmed, retryCount = 2)
-                        if (structured == null || structured.tasks.isEmpty()) {
-                            voiceFallbackText = trimmed
-                            voiceStatus = "Couldn't extract tasks after 3 attempts. Save this to Brain Dump inbox."
-                            return@runCatching
-                        }
-
-                        val now = Clock.System.now().toEpochMilliseconds()
-                        val drafts = structured.tasks
-
-                        drafts.forEach { draft ->
-                            createTaskUseCase(
-                                Task(
-                                    id = Uuid.random().toString(),
-                                    title = draft.title,
-                                    notes = draft.notes,
-                                    priority = draft.priority ?: TaskPriority.SHOULD,
-                                    energy = draft.energy ?: TaskEnergy.MEDIUM,
-                                    type = TaskType.FLEXIBLE,
-                                    assignedToPersonId = selectedPersonId,
-                                    affectedPersonIds = selectedPersonId?.let { listOf(it) } ?: emptyList(),
-                                    createdAt = now,
-                                    updatedAt = now,
-                                ),
-                            )
-                        }
-
-                        createInboxItemUseCase(
-                            InboxItem(
-                                id = Uuid.random().toString(),
-                                rawText = trimmed,
-                                source = InboxSource.VOICE,
-                                status = InboxStatus.PROCESSED,
-                                createdAt = now,
-                                personId = selectedPersonId,
-                            ),
-                        )
-
-                        val count = drafts.size
-                        notifier.showToast(
-                            if (count == 1) {
-                                "Added 1 task from voice note"
-                            } else {
-                                "Added $count tasks from voice note"
-                            },
-                        )
-                        voiceFallbackText = null
-                        voiceStatus =
-                            if (count == 1) {
-                                "Added 1 task from voice note."
-                            } else {
-                                "Added $count tasks from voice note."
+                    voiceStatus = "Captured. Processing voice note..."
+                    try {
+                        when (
+                            val result =
+                                processVoiceNoteUseCase(
+                                    rawText = trimmed,
+                                    source = VoiceCaptureSource.QUICK_ADD_VOICE,
+                                    personId = selectedPersonId,
+                                )
+                        ) {
+                            is VoiceNoteProcessResult.Success -> {
+                                val count = result.taskCount
+                                val baseMessage =
+                                    if (count == 1) {
+                                        "Added 1 task from voice note"
+                                    } else {
+                                        "Added $count tasks from voice note"
+                                    }
+                                notifier.showToast(baseMessage)
+                                voiceStatus =
+                                    if (result.usedHeuristicFallback) {
+                                        "$baseMessage using heuristic fallback."
+                                    } else {
+                                        "$baseMessage."
+                                    }
                             }
-                    }.onFailure {
-                        voiceStatus = "Unable to process voice note."
-                    }.also {
+
+                            is VoiceNoteProcessResult.Failure -> {
+                                voiceStatus = result.reason.userMessage
+                            }
+                        }
+                    } finally {
                         isVoiceProcessing = false
                     }
                 }
@@ -200,34 +168,6 @@ fun QuickAddSheet(
             voiceStatus = voiceStatus,
             capturedVoiceText = capturedVoiceText,
             isVoiceProcessing = isVoiceProcessing,
-            voiceFallbackText = voiceFallbackText,
-            isSavingVoiceFallback = isSavingVoiceFallback,
-            onSaveVoiceFallback = {
-                val fallbackText = voiceFallbackText?.trim().orEmpty()
-                if (fallbackText.isEmpty()) return@QuickAddContent
-                scope.launch {
-                    isSavingVoiceFallback = true
-                    runCatching {
-                        createInboxItemUseCase(
-                            InboxItem(
-                                id = Uuid.random().toString(),
-                                rawText = fallbackText,
-                                source = InboxSource.VOICE,
-                                status = InboxStatus.NEW,
-                                createdAt = Clock.System.now().toEpochMilliseconds(),
-                                personId = selectedPersonId,
-                            ),
-                        )
-                    }.onSuccess {
-                        voiceFallbackText = null
-                        voiceStatus = "Saved to Brain Dump inbox."
-                    }.onFailure {
-                        voiceStatus = "Unable to save to Brain Dump inbox."
-                    }.also {
-                        isSavingVoiceFallback = false
-                    }
-                }
-            },
             scope = scope,
         )
     }
@@ -247,9 +187,6 @@ internal fun QuickAddContent(
     voiceStatus: String? = null,
     capturedVoiceText: String? = null,
     isVoiceProcessing: Boolean = false,
-    voiceFallbackText: String? = null,
-    isSavingVoiceFallback: Boolean = false,
-    onSaveVoiceFallback: () -> Unit = {},
     scope: CoroutineScope = rememberCoroutineScope(),
 ) {
     var selectedPersonId by rememberSaveable { mutableStateOf(defaultPersonId) }
@@ -505,14 +442,6 @@ internal fun QuickAddContent(
                                 style = XCalendarTheme.typography.bodySmall,
                                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
                             )
-                        }
-                        if (voiceFallbackText != null) {
-                            TextButton(
-                                onClick = onSaveVoiceFallback,
-                                enabled = !isSavingVoiceFallback,
-                            ) {
-                                Text(if (isSavingVoiceFallback) "Saving..." else "Save to Brain Dump inbox")
-                            }
                         }
                     }
                 }
