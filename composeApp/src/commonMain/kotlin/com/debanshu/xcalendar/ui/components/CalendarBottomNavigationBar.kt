@@ -9,18 +9,22 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -51,9 +55,12 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,6 +84,7 @@ import xcalendar.composeapp.generated.resources.ic_calendar_view_week
 import xcalendar.composeapp.generated.resources.ic_description
 import xcalendar.composeapp.generated.resources.ic_notifications
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 // Fluid dynamics constants
 private const val MAX_STRETCH = 0.4f // Maximum horizontal stretch factor (for drag)
@@ -85,6 +93,13 @@ private const val COMPRESS_RATIO = 0.25f // Ratio of vertical compression to hor
 private const val DRAG_SENSITIVITY = 30f // Lower = more sensitive deformation during drag
 private const val SETTLE_DAMPING = 0.35f // Spring damping for settling (lower = more bouncy)
 private const val SETTLE_STIFFNESS = 400f // Spring stiffness for settling
+
+private val DockHorizontalPadding: Dp = 20.dp
+private val DockSafeEdgeMargin: Dp = 12.dp
+private val DockControlsHeight: Dp = 56.dp
+private val ShortcutAnchorOffset: Dp = 72.dp
+private val ShortcutSpacing: Dp = 8.dp
+private const val ShortcutFabCount: Int = 3
 
 // Reusable animation specifications
 private object NavBarAnimationSpecs {
@@ -307,6 +322,8 @@ internal fun CalendarBottomNavigationBar(
     onAddTaskShortcut: (() -> Unit)? = null,
     onAddEventShortcut: (() -> Unit)? = null,
     onAddVoiceShortcut: (() -> Unit)? = null,
+    dockPosition: DockPositionFractions = DockPositionFractions(),
+    onDockPositionChange: (DockPositionFractions) -> Unit = {},
 ) {
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val coroutineScope = rememberCoroutineScope()
@@ -317,6 +334,7 @@ internal fun CalendarBottomNavigationBar(
     val currentOnAddTaskShortcut by rememberUpdatedState(onAddTaskShortcut)
     val currentOnAddEventShortcut by rememberUpdatedState(onAddEventShortcut)
     val currentOnAddVoiceShortcut by rememberUpdatedState(onAddVoiceShortcut)
+    val currentOnDockPositionChange by rememberUpdatedState(onDockPositionChange)
     var showAddShortcuts by remember { mutableStateOf(false) }
 
     val navItems =
@@ -383,145 +401,291 @@ internal fun CalendarBottomNavigationBar(
     }
 
     with(sharedTransitionScope) {
-        Row(
+        BoxWithConstraints(
             modifier =
                 modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp)
+                    .fillMaxSize()
                     .renderInSharedTransitionScopeOverlay(zIndexInOverlay = 1f),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            var navBarSize by remember { mutableStateOf(IntSize.Zero) }
+            val density = LocalDensity.current
+            val layoutDirection = LocalLayoutDirection.current
+            val safeInsets = WindowInsets.safeDrawing
 
-            val glassEffect =
-                rememberGlassEffect(
-                    GlassEffectInput(
-                        navBarSize = navBarSize,
-                        state = state,
-                        onSurfaceColor = XCalendarTheme.colorScheme.onSurface,
-                        primaryColor = XCalendarTheme.colorScheme.primary,
+            val parentWidthPx = with(density) { maxWidth.toPx() }
+            val parentHeightPx = with(density) { maxHeight.toPx() }
+            val dockWidth = (maxWidth - (DockHorizontalPadding * 2)).coerceAtLeast(0.dp)
+            val dockWidthPx = with(density) { dockWidth.toPx() }
+            val dockHeightPx = with(density) { DockControlsHeight.toPx() }
+            val safeLeftInsetPx = safeInsets.getLeft(density, layoutDirection).toFloat()
+            val safeTopInsetPx = safeInsets.getTop(density).toFloat()
+            val safeRightInsetPx = safeInsets.getRight(density, layoutDirection).toFloat()
+            val safeBottomInsetPx = safeInsets.getBottom(density).toFloat()
+            val dockEdgeMarginPx = with(density) { DockSafeEdgeMargin.toPx() }
+
+            val layoutConfig =
+                remember(
+                    parentWidthPx,
+                    parentHeightPx,
+                    dockWidthPx,
+                    dockHeightPx,
+                    safeLeftInsetPx,
+                    safeTopInsetPx,
+                    safeRightInsetPx,
+                    safeBottomInsetPx,
+                    dockEdgeMarginPx,
+                ) {
+                    DockLayoutConfig(
+                        parentWidthPx = parentWidthPx,
+                        parentHeightPx = parentHeightPx,
+                        dockWidthPx = dockWidthPx,
+                        dockHeightPx = dockHeightPx,
+                        safeLeftInsetPx = safeLeftInsetPx,
+                        safeTopInsetPx = safeTopInsetPx,
+                        safeRightInsetPx = safeRightInsetPx,
+                        safeBottomInsetPx = safeBottomInsetPx,
+                        edgeMarginPx = dockEdgeMarginPx,
+                    )
+                }
+
+            var dockOffsetPx by remember {
+                mutableStateOf(
+                    DockPositioning.fractionsToOffset(
+                        fractions = dockPosition,
+                        config = layoutConfig,
                     ),
                 )
-
-            Box(
-                modifier =
-                    Modifier
-                        .height(56.dp)
-                        .weight(1f)
-                        .onSizeChanged { navBarSize = it }
-                        .graphicsLayer {
-                            renderEffect = glassEffect
-                            scaleX = state.boxScale.value
-                            scaleY = state.boxScale.value
-                        },
-            ) {
-                Row(
-                    modifier =
-                        Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(30.dp))
-                            .background(XCalendarTheme.colorScheme.surfaceContainer)
-                            .padding(3.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    navItems.forEachIndexed { index, navItem ->
-                        BottomNavItem(
-                            modifier =
-                                Modifier.onGloballyPositioned { coordinates ->
-                                    state.itemMetrics[index] =
-                                        ItemMetrics(
-                                            left = coordinates.positionInParent().x,
-                                            width = coordinates.size.width.toFloat(),
-                                        )
-                                    if (state.indicatorWidthPx.value == 0f || index == selectedIndex) {
-                                        state.indicatorWidthPx.value = coordinates.size.width.toFloat()
-                                    }
-                                },
-                            showBackground = selectedIndex == index && state.phase.value == AnimationPhase.Idle,
-                            onClick = {
-                                if (index != selectedIndex && state.phase.value == AnimationPhase.Idle) {
-                                    // Fire selection immediately for responsive feel
-                                    currentOnViewSelect(navItem.screen)
-                                    if (!reducedMotionEnabled) {
-                                        coroutineScope.launch {
-                                            state.animateClickTransition(index)
-                                        }
-                                    }
-                                }
-                            },
-                            icon = navItem.icon,
-                            label = navItem.label,
-                        )
-                    }
-                }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            LaunchedEffect(layoutConfig, dockPosition) {
+                dockOffsetPx =
+                    DockPositioning.fractionsToOffset(
+                        fractions = dockPosition,
+                        config = layoutConfig,
+                    )
+            }
 
-            Box(
-                contentAlignment = Alignment.BottomCenter,
+            val shortcutHeightPx =
+                with(density) {
+                    (DockControlsHeight * ShortcutFabCount + ShortcutSpacing * (ShortcutFabCount - 1)).toPx()
+                }
+            val shortcutAnchorOffsetPx = with(density) { ShortcutAnchorOffset.toPx() }
+            val shortcutDirection =
+                remember(dockOffsetPx, layoutConfig, shortcutHeightPx, shortcutAnchorOffsetPx) {
+                    DockPositioning.chooseShortcutExpansionDirection(
+                        offset = dockOffsetPx,
+                        config = layoutConfig,
+                        shortcutsHeightPx = shortcutHeightPx,
+                        shortcutAnchorOffsetPx = shortcutAnchorOffsetPx,
+                    )
+                }
+
+            Row(
+                modifier =
+                    Modifier
+                        .width(dockWidth)
+                        .offset {
+                            androidx.compose.ui.unit.IntOffset(
+                                dockOffsetPx.x.roundToInt(),
+                                dockOffsetPx.y.roundToInt(),
+                            )
+                        }.pointerInput(layoutConfig) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    showAddShortcuts = false
+                                },
+                                onDrag = { change, dragAmount ->
+                                    change.consume()
+                                    val nextOffset =
+                                        DockPositioning.clampOffset(
+                                            offset =
+                                                DockOffsetPx(
+                                                    x = dockOffsetPx.x + dragAmount.x,
+                                                    y = dockOffsetPx.y + dragAmount.y,
+                                                ),
+                                            config = layoutConfig,
+                                        )
+                                    dockOffsetPx = nextOffset
+                                    currentOnDockPositionChange(
+                                        DockPositioning.offsetToFractions(
+                                            offset = nextOffset,
+                                            config = layoutConfig,
+                                        ),
+                                    )
+                                },
+                                onDragEnd = {
+                                    val snappedOffset =
+                                        DockPositioning.snapToNearestHorizontalEdge(
+                                            offset = dockOffsetPx,
+                                            config = layoutConfig,
+                                        )
+                                    dockOffsetPx = snappedOffset
+                                    currentOnDockPositionChange(
+                                        DockPositioning.offsetToFractions(
+                                            offset = snappedOffset,
+                                            config = layoutConfig,
+                                        ),
+                                    )
+                                },
+                                onDragCancel = {
+                                    val snappedOffset =
+                                        DockPositioning.snapToNearestHorizontalEdge(
+                                            offset = dockOffsetPx,
+                                            config = layoutConfig,
+                                        )
+                                    dockOffsetPx = snappedOffset
+                                    currentOnDockPositionChange(
+                                        DockPositioning.offsetToFractions(
+                                            offset = snappedOffset,
+                                            config = layoutConfig,
+                                        ),
+                                    )
+                                },
+                            )
+                        },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                if (showAddShortcuts) {
-                    Column(
-                        modifier = Modifier.padding(bottom = 72.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
+                var navBarSize by remember { mutableStateOf(IntSize.Zero) }
+
+                val glassEffect =
+                    rememberGlassEffect(
+                        GlassEffectInput(
+                            navBarSize = navBarSize,
+                            state = state,
+                            onSurfaceColor = XCalendarTheme.colorScheme.onSurface,
+                            primaryColor = XCalendarTheme.colorScheme.primary,
+                        ),
+                    )
+
+                Box(
+                    modifier =
+                        Modifier
+                            .height(DockControlsHeight)
+                            .weight(1f)
+                            .onSizeChanged { navBarSize = it }
+                            .graphicsLayer {
+                                renderEffect = glassEffect
+                                scaleX = state.boxScale.value
+                                scaleY = state.boxScale.value
+                            },
+                ) {
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(30.dp))
+                                .background(XCalendarTheme.colorScheme.surfaceContainer)
+                                .padding(3.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        AddShortcutFab(
-                            label = "Task",
-                            contentDescription = "Quick add task",
-                            onClick = {
-                                showAddShortcuts = false
-                                (currentOnAddTaskShortcut ?: currentOnAddClick).invoke()
-                            },
-                        )
-                        AddShortcutFab(
-                            label = "Event",
-                            contentDescription = "Quick add event",
-                            onClick = {
-                                showAddShortcuts = false
-                                (currentOnAddEventShortcut ?: currentOnAddClick).invoke()
-                            },
-                        )
-                        AddShortcutFab(
-                            label = "Voice",
-                            contentDescription = "Quick voice capture",
-                            onClick = {
-                                showAddShortcuts = false
-                                (currentOnAddVoiceShortcut ?: currentOnAddClick).invoke()
-                            },
-                        )
+                        navItems.forEachIndexed { index, navItem ->
+                            BottomNavItem(
+                                modifier =
+                                    Modifier.onGloballyPositioned { coordinates ->
+                                        state.itemMetrics[index] =
+                                            ItemMetrics(
+                                                left = coordinates.positionInParent().x,
+                                                width = coordinates.size.width.toFloat(),
+                                            )
+                                        if (state.indicatorWidthPx.value == 0f || index == selectedIndex) {
+                                            state.indicatorWidthPx.value = coordinates.size.width.toFloat()
+                                        }
+                                    },
+                                showBackground = selectedIndex == index && state.phase.value == AnimationPhase.Idle,
+                                onClick = {
+                                    if (index != selectedIndex && state.phase.value == AnimationPhase.Idle) {
+                                        // Fire selection immediately for responsive feel
+                                        currentOnViewSelect(navItem.screen)
+                                        if (!reducedMotionEnabled) {
+                                            coroutineScope.launch {
+                                                state.animateClickTransition(index)
+                                            }
+                                        }
+                                    }
+                                },
+                                icon = navItem.icon,
+                                label = navItem.label,
+                            )
+                        }
                     }
                 }
 
-                FloatingActionButton(
-                    onClick = {
-                        showAddShortcuts = false
-                        currentOnAddClick()
-                    },
-                    modifier =
-                        Modifier
-                            .size(56.dp)
-                            .combinedClickable(
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Box(
+                    modifier = Modifier.height(DockControlsHeight),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    if (showAddShortcuts) {
+                        Column(
+                            modifier =
+                                if (shortcutDirection == ShortcutExpansionDirection.UP) {
+                                    Modifier
+                                        .align(Alignment.BottomCenter)
+                                        .offset(y = -ShortcutAnchorOffset)
+                                } else {
+                                    Modifier
+                                        .align(Alignment.TopCenter)
+                                        .offset(y = ShortcutAnchorOffset)
+                                },
+                            verticalArrangement = Arrangement.spacedBy(ShortcutSpacing),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            AddShortcutFab(
+                                label = "Task",
+                                contentDescription = "Quick add task",
                                 onClick = {
                                     showAddShortcuts = false
-                                    currentOnAddClick()
+                                    (currentOnAddTaskShortcut ?: currentOnAddClick).invoke()
                                 },
-                                onLongClick = { showAddShortcuts = !showAddShortcuts },
-                            ).semantics {
-                                contentDescription =
-                                    "Quick add task, event, and voice shortcuts."
-                            },
-                    shape = CircleShape,
-                    containerColor = XCalendarTheme.colorScheme.primary,
-                    contentColor = XCalendarTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(
-                        painter = painterResource(Res.drawable.ic_add),
-                        contentDescription = null,
-                    )
+                            )
+                            AddShortcutFab(
+                                label = "Event",
+                                contentDescription = "Quick add event",
+                                onClick = {
+                                    showAddShortcuts = false
+                                    (currentOnAddEventShortcut ?: currentOnAddClick).invoke()
+                                },
+                            )
+                            AddShortcutFab(
+                                label = "Voice",
+                                contentDescription = "Quick voice capture",
+                                onClick = {
+                                    showAddShortcuts = false
+                                    (currentOnAddVoiceShortcut ?: currentOnAddClick).invoke()
+                                },
+                            )
+                        }
+                    }
+
+                    FloatingActionButton(
+                        onClick = {
+                            showAddShortcuts = false
+                            currentOnAddClick()
+                        },
+                        modifier =
+                            Modifier
+                                .size(56.dp)
+                                .combinedClickable(
+                                    onClick = {
+                                        showAddShortcuts = false
+                                        currentOnAddClick()
+                                    },
+                                    onLongClick = { showAddShortcuts = !showAddShortcuts },
+                                ).semantics {
+                                    contentDescription =
+                                        "Quick add task, event, and voice shortcuts."
+                                },
+                        shape = CircleShape,
+                        containerColor = XCalendarTheme.colorScheme.primary,
+                        contentColor = XCalendarTheme.colorScheme.onPrimary,
+                    ) {
+                        Icon(
+                            painter = painterResource(Res.drawable.ic_add),
+                            contentDescription = null,
+                        )
+                    }
                 }
             }
         }

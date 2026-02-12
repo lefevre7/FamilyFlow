@@ -3,6 +3,7 @@ package com.debanshu.xcalendar
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -14,7 +15,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.navigation3.runtime.NavKey
@@ -22,6 +22,7 @@ import androidx.navigation3.runtime.rememberNavBackStack
 import androidx.savedstate.serialization.SavedStateConfiguration
 import com.debanshu.xcalendar.ui.CalendarViewModel
 import com.debanshu.xcalendar.ui.components.CalendarBottomNavigationBar
+import com.debanshu.xcalendar.ui.components.DockPositionFractions
 import com.debanshu.xcalendar.ui.components.ErrorSnackbar
 import com.debanshu.xcalendar.ui.components.dialog.QuickAddMode
 import com.debanshu.xcalendar.ui.components.dialog.QuickAddSheet
@@ -114,6 +115,8 @@ private fun CalendarApp(
     var quickAddMode by remember { mutableStateOf(QuickAddMode.TASK) }
     var showEventSheet by remember { mutableStateOf(false) }
     var showOnboarding by rememberSaveable { mutableStateOf(showOnboardingInitially) }
+    var dockPositionX by rememberSaveable { mutableStateOf(0.5f) }
+    var dockPositionY by rememberSaveable { mutableStateOf(1f) }
     val quickAddRequest = quickAddRequests?.collectAsState(initial = null)?.value
 
     LaunchedEffect(quickAddRequest) {
@@ -181,10 +184,7 @@ private fun CalendarApp(
                         onEventClick = { event -> eventViewModel.selectEvent(event) },
                     )
                     CalendarBottomNavigationBar(
-                        modifier =
-                            Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = paddingValues.calculateBottomPadding()),
+                        modifier = Modifier.fillMaxSize(),
                         selectedView = backStack.lastOrNull() as? NavigableScreen ?: NavigableScreen.Today,
                         onViewSelect = { view ->
                             backStack.replaceLast(view)
@@ -203,6 +203,15 @@ private fun CalendarApp(
                         onAddVoiceShortcut = {
                             quickAddMode = QuickAddMode.VOICE
                             showQuickAddSheet = true
+                        },
+                        dockPosition =
+                            DockPositionFractions(
+                                x = dockPositionX,
+                                y = dockPositionY,
+                            ),
+                        onDockPositionChange = { position ->
+                            dockPositionX = position.x
+                            dockPositionY = position.y
                         },
                     )
                 }
