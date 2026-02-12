@@ -7,6 +7,7 @@ Guardrails
 - Event people ownership must be added without Room schema migration.
 - LLM: LiteRT-LM (Gemma3) with asset pack + `media.githubusercontent.com` download fallback.
 - OCR: Tesseract4Android, `eng.traineddata` bundled in APK.
+- If you ever need to use Clock.System.now(), use System.nanoTime() instead as this runs on an Android Phone and there is no Clock.System.now() on Android Phone
 - Display name: ADHD MOM; keep applicationId/package unchanged.
 - After every item: run `./gradlew :composeApp:test` and `./gradlew :composeApp:testDebugUnitTest`, and fix failures before moving on.
 - For each item: search the codebase for related modules first; if anything is unclear, ask follow-up questions until high confidence (>95%) before implementing.

@@ -2,9 +2,8 @@ package com.debanshu.xcalendar.platform
 
 import android.content.Context
 import android.graphics.Bitmap
-import android.graphics.ImageDecoder
+import android.graphics.BitmapFactory
 import android.net.Uri
-import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
@@ -17,6 +16,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
+import kotlin.math.max
 
 @Composable
 actual fun rememberOcrCaptureController(
@@ -77,12 +77,24 @@ actual fun rememberOcrCaptureController(
 
 private fun decodeBitmap(context: Context, uri: Uri): Bitmap? {
     return runCatching {
-        if (android.os.Build.VERSION.SDK_INT >= 28) {
-            val source = ImageDecoder.createSource(context.contentResolver, uri)
-            ImageDecoder.decodeBitmap(source)
-        } else {
-            @Suppress("DEPRECATION")
-            MediaStore.Images.Media.getBitmap(context.contentResolver, uri)
+        val boundsOptions =
+            BitmapFactory.Options().apply {
+                inJustDecodeBounds = true
+            }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, boundsOptions)
+        }
+        if (boundsOptions.outWidth <= 0 || boundsOptions.outHeight <= 0) return null
+
+        val maxDimension = MAX_OCR_DIMENSION
+        val sampleSize = calculateInSampleSize(boundsOptions.outWidth, boundsOptions.outHeight, maxDimension)
+        val decodeOptions =
+            BitmapFactory.Options().apply {
+                inSampleSize = sampleSize
+                inPreferredConfig = Bitmap.Config.ARGB_8888
+            }
+        context.contentResolver.openInputStream(uri)?.use { stream ->
+            BitmapFactory.decodeStream(stream, null, decodeOptions)
         }
     }.getOrNull()
 }
@@ -95,21 +107,23 @@ private fun runOcr(
         IllegalStateException("OCR data files missing"),
     )
 
-    val api = TessBaseAPI()
-    val initialized = api.init(dataPath, "eng")
-    if (!initialized) {
-        api.recycle()
-        return Result.failure(IllegalStateException("Failed to initialize OCR"))
-    }
-
-    api.setImage(bitmap)
-    val text = api.utF8Text ?: ""
-    api.recycle()
-
-    return if (text.isBlank()) {
-        Result.failure(IllegalStateException("No text found"))
-    } else {
-        Result.success(text)
+    return runCatching {
+        val normalizedBitmap = normalizeBitmapForOcr(bitmap)
+        val api = TessBaseAPI()
+        try {
+            val initialized = api.init(dataPath, "eng")
+            check(initialized) { "Failed to initialize OCR" }
+            api.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO)
+            api.setImage(normalizedBitmap)
+            val text = api.utF8Text?.trim().orEmpty()
+            check(text.isNotBlank()) { "No text found" }
+            text
+        } finally {
+            api.recycle()
+            if (normalizedBitmap !== bitmap && !normalizedBitmap.isRecycled) {
+                normalizedBitmap.recycle()
+            }
+        }
     }
 }
 
@@ -130,3 +144,28 @@ private fun ensureTessData(context: Context): String? {
         context.filesDir.absolutePath
     }.getOrNull()
 }
+
+private fun calculateInSampleSize(
+    width: Int,
+    height: Int,
+    maxDimension: Int,
+): Int {
+    val largestDimension = max(width, height)
+    if (largestDimension <= maxDimension) return 1
+    var sampleSize = 1
+    while (largestDimension / sampleSize > maxDimension) {
+        sampleSize *= 2
+    }
+    return sampleSize
+}
+
+private fun normalizeBitmapForOcr(bitmap: Bitmap): Bitmap {
+    val largestDimension = max(bitmap.width, bitmap.height)
+    if (largestDimension <= MAX_OCR_DIMENSION) return bitmap
+    val scale = MAX_OCR_DIMENSION.toFloat() / largestDimension.toFloat()
+    val targetWidth = (bitmap.width * scale).toInt().coerceAtLeast(1)
+    val targetHeight = (bitmap.height * scale).toInt().coerceAtLeast(1)
+    return Bitmap.createScaledBitmap(bitmap, targetWidth, targetHeight, true)
+}
+
+private const val MAX_OCR_DIMENSION = 2048

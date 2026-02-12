@@ -12,18 +12,33 @@ class StructureBrainDumpUseCase(
 ) {
     suspend operator fun invoke(rawText: String): BrainDumpStructuredResult {
         val trimmed = rawText.trim()
-        val llmJson =
-            if (localLlmManager.isAvailable) {
-                val prompt = BrainDumpLlmSchema.buildPrompt(trimmed)
-                localLlmManager.generate(
-                    prompt = prompt,
-                    sampling = LlmSamplingConfig(topK = 40, topP = 0.9, temperature = 0.3),
-                )
-            } else {
-                null
-            }
-        val structured = llmJson?.let { BrainDumpStructuringEngine.structureFromLlmJson(it) }
-        return structured ?: BrainDumpStructuringEngine.structure(trimmed)
+        val structuredWithLlm = structureWithLlmRetries(trimmed, retryCount = 0)
+        return structuredWithLlm ?: BrainDumpStructuringEngine.structure(trimmed)
+    }
+
+    suspend fun structureWithLlmRetries(
+        rawText: String,
+        retryCount: Int = 2,
+    ): BrainDumpStructuredResult? {
+        val trimmed = rawText.trim()
+        if (trimmed.isEmpty() || !localLlmManager.isAvailable) return null
+
+        val attempts = retryCount.coerceAtLeast(0) + 1
+        repeat(attempts) {
+            val llmJson =
+                runCatching {
+                    val prompt = BrainDumpLlmSchema.buildPrompt(trimmed)
+                    localLlmManager.generate(
+                        prompt = prompt,
+                        sampling = LlmSamplingConfig(topK = 40, topP = 0.9, temperature = 0.3),
+                    )
+                }.getOrNull()
+
+            val structured = llmJson?.let { BrainDumpStructuringEngine.structureFromLlmJson(it) }
+            if (structured != null && structured.tasks.isNotEmpty()) return structured
+        }
+
+        return null
     }
 }
 

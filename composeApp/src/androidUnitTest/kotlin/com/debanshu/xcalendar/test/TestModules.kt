@@ -11,6 +11,7 @@ import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
 import com.debanshu.xcalendar.domain.repository.ITaskRepository
 import com.debanshu.xcalendar.domain.usecase.inbox.CreateInboxItemUseCase
+import com.debanshu.xcalendar.domain.usecase.inbox.StructureBrainDumpUseCase
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
@@ -18,6 +19,7 @@ import com.debanshu.xcalendar.domain.usecase.task.CreateTaskUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
+import com.debanshu.xcalendar.domain.llm.LocalLlmManager
 import com.debanshu.xcalendar.platform.PlatformNotifier
 import com.debanshu.xcalendar.ui.state.LensStateHolder
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
@@ -56,6 +58,7 @@ fun buildTestDependencies(
             single<ReminderScheduler> { reminderScheduler }
             single<WidgetUpdater> { widgetUpdater }
             single<PlatformNotifier> { notifier }
+            single<LocalLlmManager> { FakeLocalLlmManager() }
 
             single { GetPeopleUseCase(get()) }
             single { GetTasksUseCase(get()) }
@@ -64,6 +67,7 @@ fun buildTestDependencies(
             single { CreateTaskUseCase(get(), get(), get(), get()) }
             single { UpdateTaskUseCase(get(), get(), get(), get()) }
             single { CreateInboxItemUseCase(get()) }
+            single { StructureBrainDumpUseCase(get()) }
             single { TimerStateHolder() }
             single { LensStateHolder(get()) }
             single { SyncConflictStateHolder() }

@@ -73,7 +73,9 @@ import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskScheduleUseCase
 import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
+import com.debanshu.xcalendar.platform.PlatformFeatures
 import com.debanshu.xcalendar.platform.PlatformNotifier
+import com.debanshu.xcalendar.platform.rememberVoiceCaptureController
 import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
 import com.debanshu.xcalendar.ui.components.core.ScheduleHolidayTag
 import com.debanshu.xcalendar.ui.screen.monthScreen.components.MonthView
@@ -134,6 +136,25 @@ fun PlanScreen(
     var selectedCalendarId by rememberSaveable { mutableStateOf<String?>(null) }
     var showOcrSheet by rememberSaveable { mutableStateOf(false) }
     var brainDumpInput by rememberSaveable { mutableStateOf("") }
+    var isVoiceProcessing by rememberSaveable { mutableStateOf(false) }
+
+    val voiceController = rememberVoiceCaptureController(
+        onResult = { text ->
+            val trimmed = text.trim()
+            if (trimmed.isNotEmpty()) {
+                brainDumpInput = trimmed
+                isVoiceProcessing = false
+                notifier.showToast("Voice captured")
+            } else {
+                isVoiceProcessing = false
+                notifier.showToast("Didn't catch that. Try again.")
+            }
+        },
+        onError = { message ->
+            isVoiceProcessing = false
+            notifier.showToast(message)
+        }
+    )
 
     LaunchedEffect(visibleCalendars) {
         if (selectedCalendarId == null && visibleCalendars.isNotEmpty()) {
@@ -221,6 +242,13 @@ fun PlanScreen(
             inboxItems = inboxItems,
             captureText = brainDumpInput,
             onCaptureTextChanged = { brainDumpInput = it },
+            onVoiceCapture = if (PlatformFeatures.voiceCapture.supported && voiceController.isAvailable) {
+                {
+                    isVoiceProcessing = true
+                    voiceController.start()
+                }
+            } else null,
+            isVoiceProcessing = isVoiceProcessing,
             onCapture = {
                 val raw = brainDumpInput.trim()
                 if (raw.isBlank()) {
@@ -416,6 +444,8 @@ internal fun BrainDumpSection(
     captureText: String,
     onCaptureTextChanged: (String) -> Unit,
     onCapture: () -> Unit,
+    onVoiceCapture: (() -> Unit)? = null,
+    isVoiceProcessing: Boolean = false,
     onProcessAll: () -> Unit,
     onProcessItem: (InboxItem) -> Unit,
     onArchive: (InboxItem) -> Unit,
@@ -462,6 +492,21 @@ internal fun BrainDumpSection(
                 modifier = Modifier.semantics { contentDescription = "Add capture to brain dump inbox" },
             ) {
                 Text("Add to inbox")
+            }
+            if (onVoiceCapture != null) {
+                TextButton(
+                    onClick = onVoiceCapture,
+                    enabled = !isVoiceProcessing,
+                    modifier = Modifier.semantics {
+                        contentDescription = if (isVoiceProcessing) {
+                            "Voice capture in progress"
+                        } else {
+                            "Voice capture. Double tap to say it."
+                        }
+                    },
+                ) {
+                    Text(if (isVoiceProcessing) "Listening..." else "Say it")
+                }
             }
         }
 

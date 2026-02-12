@@ -512,7 +512,7 @@ internal fun CalendarBottomNavigationBar(
                                 onLongClick = { showAddShortcuts = !showAddShortcuts },
                             ).semantics {
                                 contentDescription =
-                                    "Quick add task. Long press for task, event, and voice shortcuts."
+                                    "Quick add task, event, and voice shortcuts."
                             },
                     shape = CircleShape,
                     containerColor = XCalendarTheme.colorScheme.primary,

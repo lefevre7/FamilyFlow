@@ -16,14 +16,28 @@ class StructureOcrUseCase(
         referenceDate: LocalDate,
         timeZone: TimeZone,
     ): OcrStructuredResult {
-        val llmJson =
-            if (ocrLlmClient.isAvailable) {
-                ocrLlmClient.structureOcr(rawText, referenceDate, timeZone)
-            } else {
-                null
-            }
+        val llmJson = structureWithLlmRetries(rawText, referenceDate, timeZone)
         val structuredFromLlm =
             llmJson?.let { OcrStructuringEngine.structureFromLlmJson(it, referenceDate) }
         return structuredFromLlm ?: OcrStructuringEngine.structure(rawText, referenceDate, timeZone)
+    }
+
+    suspend fun structureWithLlmRetries(
+        rawText: String,
+        referenceDate: LocalDate,
+        timeZone: TimeZone,
+        retryCount: Int = 2,
+    ): String? {
+        if (!ocrLlmClient.isAvailable) return null
+
+        val attempts = retryCount.coerceAtLeast(0) + 1
+        repeat(attempts) {
+            val llmJson =
+                runCatching {
+                    ocrLlmClient.structureOcr(rawText, referenceDate, timeZone)
+                }.getOrNull()
+            if (!llmJson.isNullOrBlank()) return llmJson
+        }
+        return null
     }
 }

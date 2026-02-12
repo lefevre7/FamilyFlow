@@ -4,6 +4,7 @@ import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.FamilyLensSelection
 import com.debanshu.xcalendar.domain.model.InboxItem
 import com.debanshu.xcalendar.domain.model.Person
+import com.debanshu.xcalendar.domain.model.PersonRole
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
 import com.debanshu.xcalendar.domain.model.Routine
 import com.debanshu.xcalendar.domain.model.Task
@@ -15,7 +16,9 @@ import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
 import com.debanshu.xcalendar.domain.repository.ITaskRepository
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
+import com.debanshu.xcalendar.domain.llm.LocalLlmManager
 import com.debanshu.xcalendar.platform.PlatformNotifier
+import com.debanshu.xcalendar.platform.VoiceCaptureController
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
@@ -164,12 +167,39 @@ class FakeWidgetUpdater : WidgetUpdater {
 class FakeNotifier : PlatformNotifier {
     val messages = mutableListOf<String>()
     val sharedPayloads = mutableListOf<Pair<String, String>>()
+    var lastToast: String? = null
 
     override fun showToast(message: String) {
         messages.add(message)
+        lastToast = message
     }
 
     override fun shareText(subject: String, text: String) {
         sharedPayloads.add(subject to text)
     }
+}
+
+class FakeLocalLlmManager : LocalLlmManager {
+    override val isAvailable: Boolean = false
+
+    override fun getStatus(): com.debanshu.xcalendar.domain.llm.LlmModelStatus =
+        com.debanshu.xcalendar.domain.llm.LlmModelStatus(
+            available = false,
+            source = com.debanshu.xcalendar.domain.llm.LlmModelSource.NONE,
+            sizeBytes = 0L,
+            requiredBytes = 0L,
+        )
+
+    override suspend fun ensureModelAvailable(): Boolean = false
+
+    override suspend fun downloadModel(onProgress: (Int) -> Unit): Boolean = false
+
+    override suspend fun generate(
+        prompt: String,
+        sampling: com.debanshu.xcalendar.domain.llm.LlmSamplingConfig,
+    ): String? = null
+
+    override fun deleteModel(): Boolean = false
+
+    override fun consumeWarningMessage(): String? = null
 }

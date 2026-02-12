@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -13,6 +14,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.ModalBottomSheet
@@ -31,6 +33,8 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.model.InboxItem
@@ -88,6 +92,10 @@ fun QuickAddSheet(
     }
 
     var voiceStatus by rememberSaveable { mutableStateOf<String?>(null) }
+    var capturedVoiceText by rememberSaveable { mutableStateOf<String?>(null) }
+    var isVoiceProcessing by rememberSaveable { mutableStateOf(false) }
+    var voiceFallbackText by rememberSaveable { mutableStateOf<String?>(null) }
+    var isSavingVoiceFallback by rememberSaveable { mutableStateOf(false) }
     var selectedPersonId by rememberSaveable { mutableStateOf(defaultPersonId) }
 
     LaunchedEffect(defaultPersonId, selectedPersonId) {
@@ -100,16 +108,21 @@ fun QuickAddSheet(
         onResult = { text ->
             val trimmed = text.trim()
             if (trimmed.isNotEmpty()) {
+                capturedVoiceText = trimmed
+                voiceFallbackText = null
                 scope.launch {
+                    isVoiceProcessing = true
+                    voiceStatus = "Captured. Structuring with local AI..."
                     runCatching {
-                        val structured = structureBrainDumpUseCase(trimmed)
+                        val structured = structureBrainDumpUseCase.structureWithLlmRetries(trimmed, retryCount = 2)
+                        if (structured == null || structured.tasks.isEmpty()) {
+                            voiceFallbackText = trimmed
+                            voiceStatus = "Couldn't extract tasks after 3 attempts. Save this to Brain Dump inbox."
+                            return@runCatching
+                        }
+
                         val now = Clock.System.now().toEpochMilliseconds()
-                        val drafts =
-                            if (structured.tasks.isNotEmpty()) {
-                                structured.tasks
-                            } else {
-                                listOf(com.debanshu.xcalendar.domain.model.BrainDumpTaskDraft(title = trimmed))
-                            }
+                        val drafts = structured.tasks
 
                         drafts.forEach { draft ->
                             createTaskUseCase(
@@ -147,16 +160,27 @@ fun QuickAddSheet(
                                 "Added $count tasks from voice note"
                             },
                         )
-                        onDismiss()
+                        voiceFallbackText = null
+                        voiceStatus =
+                            if (count == 1) {
+                                "Added 1 task from voice note."
+                            } else {
+                                "Added $count tasks from voice note."
+                            }
                     }.onFailure {
                         voiceStatus = "Unable to process voice note."
+                    }.also {
+                        isVoiceProcessing = false
                     }
                 }
             } else {
                 voiceStatus = "Didn't catch that. Try again."
             }
         },
-        onError = { message -> voiceStatus = message },
+        onError = { message ->
+            isVoiceProcessing = false
+            voiceStatus = message
+        },
     )
 
     ModalBottomSheet(
@@ -174,6 +198,36 @@ fun QuickAddSheet(
             createTaskUseCase = createTaskUseCase,
             voiceController = voiceController,
             voiceStatus = voiceStatus,
+            capturedVoiceText = capturedVoiceText,
+            isVoiceProcessing = isVoiceProcessing,
+            voiceFallbackText = voiceFallbackText,
+            isSavingVoiceFallback = isSavingVoiceFallback,
+            onSaveVoiceFallback = {
+                val fallbackText = voiceFallbackText?.trim().orEmpty()
+                if (fallbackText.isEmpty()) return@QuickAddContent
+                scope.launch {
+                    isSavingVoiceFallback = true
+                    runCatching {
+                        createInboxItemUseCase(
+                            InboxItem(
+                                id = Uuid.random().toString(),
+                                rawText = fallbackText,
+                                source = InboxSource.VOICE,
+                                status = InboxStatus.NEW,
+                                createdAt = Clock.System.now().toEpochMilliseconds(),
+                                personId = selectedPersonId,
+                            ),
+                        )
+                    }.onSuccess {
+                        voiceFallbackText = null
+                        voiceStatus = "Saved to Brain Dump inbox."
+                    }.onFailure {
+                        voiceStatus = "Unable to save to Brain Dump inbox."
+                    }.also {
+                        isSavingVoiceFallback = false
+                    }
+                }
+            },
             scope = scope,
         )
     }
@@ -191,12 +245,38 @@ internal fun QuickAddContent(
     createTaskUseCase: CreateTaskUseCase = koinInject(),
     voiceController: VoiceCaptureController? = null,
     voiceStatus: String? = null,
+    capturedVoiceText: String? = null,
+    isVoiceProcessing: Boolean = false,
+    voiceFallbackText: String? = null,
+    isSavingVoiceFallback: Boolean = false,
+    onSaveVoiceFallback: () -> Unit = {},
     scope: CoroutineScope = rememberCoroutineScope(),
 ) {
     var selectedPersonId by rememberSaveable { mutableStateOf(defaultPersonId) }
     var selectedPriority by rememberSaveable { mutableStateOf(TaskPriority.SHOULD) }
     var selectedEnergy by rememberSaveable { mutableStateOf(TaskEnergy.MEDIUM) }
     var taskTitle by rememberSaveable { mutableStateOf("") }
+    var isTaskVoiceProcessing by rememberSaveable { mutableStateOf(false) }
+
+    val notifier = koinInject<PlatformNotifier>()
+
+    val taskVoiceController = rememberVoiceCaptureController(
+        onResult = { text ->
+            val trimmed = text.trim()
+            if (trimmed.isNotEmpty()) {
+                taskTitle = trimmed
+                isTaskVoiceProcessing = false
+                notifier.showToast("Voice captured")
+            } else {
+                isTaskVoiceProcessing = false
+                notifier.showToast("Didn't catch that. Try again.")
+            }
+        },
+        onError = { message ->
+            isTaskVoiceProcessing = false
+            notifier.showToast(message)
+        }
+    )
 
     LaunchedEffect(defaultPersonId, selectedPersonId) {
         if (selectedPersonId == null && defaultPersonId != null) {
@@ -243,6 +323,25 @@ internal fun QuickAddContent(
                     singleLine = false,
                     maxLines = 3,
                 )
+
+                if (PlatformFeatures.voiceCapture.supported && taskVoiceController.isAvailable) {
+                    TextButton(
+                        onClick = {
+                            isTaskVoiceProcessing = true
+                            taskVoiceController.start()
+                        },
+                        enabled = !isTaskVoiceProcessing,
+                        modifier = Modifier.semantics {
+                            contentDescription = if (isTaskVoiceProcessing) {
+                                "Task voice capture in progress"
+                            } else {
+                                "Task voice capture. Double tap to say it."
+                            }
+                        },
+                    ) {
+                        Text(if (isTaskVoiceProcessing) "Listening..." else "Say it")
+                    }
+                }
 
                 if (people.isNotEmpty()) {
                     QuickAddSectionTitle("Who")
@@ -359,8 +458,45 @@ internal fun QuickAddContent(
                                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            TextButton(onClick = { voiceController.start() }) {
-                                Text("Start voice capture")
+                            TextButton(
+                                onClick = { voiceController.start() },
+                                enabled = !isVoiceProcessing,
+                            ) {
+                                Text(if (isVoiceProcessing) "Processing..." else "Start voice capture")
+                            }
+                        }
+                        capturedVoiceText?.let { captured ->
+                            Card(shape = RoundedCornerShape(12.dp)) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text(
+                                        text = "Captured text",
+                                        style = XCalendarTheme.typography.labelLarge,
+                                        color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                    Text(
+                                        text = captured,
+                                        style = XCalendarTheme.typography.bodyMedium,
+                                        color = XCalendarTheme.colorScheme.onSurface,
+                                    )
+                                }
+                            }
+                        }
+                        if (isVoiceProcessing) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                                Text(
+                                    text = "Structuring with local AI...",
+                                    style = XCalendarTheme.typography.bodySmall,
+                                    color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                                )
                             }
                         }
                         voiceStatus?.let {
@@ -369,6 +505,14 @@ internal fun QuickAddContent(
                                 style = XCalendarTheme.typography.bodySmall,
                                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                        if (voiceFallbackText != null) {
+                            TextButton(
+                                onClick = onSaveVoiceFallback,
+                                enabled = !isSavingVoiceFallback,
+                            ) {
+                                Text(if (isSavingVoiceFallback) "Saving..." else "Save to Brain Dump inbox")
+                            }
                         }
                     }
                 }

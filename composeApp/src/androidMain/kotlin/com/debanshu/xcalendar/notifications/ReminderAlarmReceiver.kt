@@ -9,6 +9,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.debanshu.xcalendar.R
 import com.debanshu.xcalendar.domain.model.ScheduleFilter
 import com.debanshu.xcalendar.domain.notifications.AndroidReminderScheduler
+import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
@@ -103,7 +104,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         NotificationManagerCompat.from(context).notify(notificationId(itemId, kind), builder.build())
 
         if (kind == ReminderConstants.KIND_SUMMARY) {
-            val scheduler = KoinPlatform.getKoin().get<AndroidReminderScheduler>()
+            val scheduler = KoinPlatform.getKoin().get<ReminderScheduler>()
             val prefsRepo =
                 KoinPlatform.getKoin().get<com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository>()
             val prefs = prefsRepo.preferences.first()
@@ -117,14 +118,16 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         val title = intent.getStringExtra(ReminderConstants.EXTRA_TITLE).orEmpty()
         val startTime = intent.getLongExtra(ReminderConstants.EXTRA_START_TIME, 0L)
         val endTime = intent.getLongExtra(ReminderConstants.EXTRA_END_TIME, 0L)
-        val scheduler = KoinPlatform.getKoin().get<AndroidReminderScheduler>()
-        scheduler.scheduleSnooze(
-            itemId = itemId,
-            itemType = itemType,
-            title = title,
-            startTime = startTime,
-            endTime = endTime,
-        )
+        val scheduler = KoinPlatform.getKoin().get<ReminderScheduler>()
+        if (scheduler is AndroidReminderScheduler) {
+            scheduler.scheduleSnooze(
+                itemId = itemId,
+                itemType = itemType,
+                title = title,
+                startTime = startTime,
+                endTime = endTime,
+            )
+        }
     }
 
     private suspend fun buildSummary(): String {
@@ -146,24 +149,33 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         val people = getPeopleUseCase().first()
         val filter = ScheduleFilter()
         val aggregation = ScheduleEngine.aggregate(events, tasks, filter, nowMillis, timeZone)
-        val items =
-            aggregation.items
-                .filter { it.startTime != null }
-                .sortedBy { it.startTime }
-                .take(3)
+        
+        // Include all items: timed, all-day, and flexible
+        // Sort by: timed items first (by start time), then all-day, then flexible
+        val timedItems = aggregation.items.filter { it.startTime != null && !it.isAllDay }
+            .sortedBy { it.startTime }
+        val allDayItems = aggregation.items.filter { it.isAllDay }
+        val flexibleItems = aggregation.items.filter { it.startTime == null && !it.isAllDay }
+        
+        val items = (timedItems + allDayItems + flexibleItems).take(3)
+        
         if (items.isEmpty()) return ""
         val names = people.associateBy { it.id }
         return items.joinToString(separator = "\n") { item ->
-            val time =
-                item.startTime?.let { startMillis ->
+            val time = when {
+                item.isAllDay -> "All day"
+                item.startTime != null -> {
+                    val startMillis = item.startTime!!
                     val endMillis = item.endTime ?: startMillis
                     val startDateTime = Instant.fromEpochMilliseconds(startMillis).toLocalDateTime(timeZone)
                     val endDateTime = Instant.fromEpochMilliseconds(endMillis).toLocalDateTime(timeZone)
                     DateTimeFormatter.formatCompactTimeRange(startDateTime, endDateTime)
-                } ?: ""
+                }
+                else -> "Flexible"
+            }
             val personLabel =
                 item.personIds.firstOrNull()?.let { names[it]?.name }?.let { " • $it" }.orEmpty()
-            "${time.ifBlank { "Today" }} — ${item.title}$personLabel"
+            "$time — ${item.title}$personLabel"
         }
     }
 

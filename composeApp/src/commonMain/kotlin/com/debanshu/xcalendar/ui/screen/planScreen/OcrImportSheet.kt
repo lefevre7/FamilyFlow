@@ -175,7 +175,7 @@ fun OcrImportSheet(
             }
 
             if (isStructuring) {
-                StatusCard("Structuring events...")
+                StatusCard("Structuring OCR with local AI JSON extraction...")
             }
 
             statusMessage?.let { StatusCard(it) }
@@ -294,11 +294,14 @@ private fun RawTextCard(text: String) {
                 color = XCalendarTheme.colorScheme.onSurface,
             )
             Text(
+                text = "Scroll to review full captured OCR text",
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
                 text = text,
                 style = XCalendarTheme.typography.bodySmall,
                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
-                maxLines = 6,
-                overflow = TextOverflow.Ellipsis,
             )
         }
     }
