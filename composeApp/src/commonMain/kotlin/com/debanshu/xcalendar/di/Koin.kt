@@ -25,6 +25,7 @@ import com.debanshu.xcalendar.data.remoteDataSource.HolidayApiService
 import com.debanshu.xcalendar.data.remoteDataSource.RemoteCalendarApiService
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.Holiday
+import com.debanshu.xcalendar.domain.usecase.google.GetAllGoogleAccountsUseCase
 import org.mobilenativefoundation.store.store5.Bookkeeper
 import org.mobilenativefoundation.store.store5.MutableStore
 import org.mobilenativefoundation.store.store5.Store
@@ -155,7 +156,7 @@ class DataModule {
     fun provideEventStore(
         apiService: RemoteCalendarApiService,
         eventDao: EventDao,
-        @Named("eventBookkeeper") bookkeeper: Bookkeeper<EventKey>
+        @Named("eventBookkeeper") bookkeeper: Bookkeeper<EventKey>,
     ): MutableStore<EventKey, List<Event>> =
         EventStoreFactory.create(apiService, eventDao, bookkeeper)
 

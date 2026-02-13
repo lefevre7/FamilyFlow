@@ -7,6 +7,8 @@ import com.debanshu.xcalendar.data.localDataSource.EventDao
 import com.debanshu.xcalendar.data.store.EventKey
 import com.debanshu.xcalendar.data.store.SingleEventKey
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.EventSource
+import com.debanshu.xcalendar.domain.usecase.google.GetAllGoogleAccountsUseCase
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterIsInstance
@@ -41,6 +43,7 @@ class EventRepository(
     @Named("singleEventStore") private val singleEventStore: MutableStore<SingleEventKey, Event>,
     private val eventDao: EventDao,
     private val eventPeopleRepository: IEventPeopleRepository,
+    private val getAllGoogleAccountsUseCase: GetAllGoogleAccountsUseCase,
 ) : BaseRepository(),
     IEventRepository {
     /**
@@ -97,6 +100,18 @@ class EventRepository(
                             } else {
                                 event.copy(affectedPersonIds = mappedPeople)
                             }
+                        }
+                    }
+                    .combine(getAllGoogleAccountsUseCase()) { events, googleAccounts ->
+                        // SINGLE DECISION POINT: Filter events by source based on connected accounts.
+                        // When adding new calendar sources (e.g., iCal), update this logic only.
+                        val hasGoogleAccount = googleAccounts.isNotEmpty()
+                        if (hasGoogleAccount) {
+                            // Show only Google Calendar events when Google is connected
+                            events.filter { it.source == EventSource.GOOGLE }
+                        } else {
+                            // Show only locally created events when no Google account
+                            events.filter { it.source == EventSource.LOCAL }
                         }
                     },
         )

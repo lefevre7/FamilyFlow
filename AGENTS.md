@@ -9,7 +9,7 @@ Guardrails
 - OCR: Tesseract4Android, `eng.traineddata` bundled in APK.
 - If you ever need to use Clock.System.now(), use System.nanoTime() instead as this runs on an Android Phone and there is no Clock.System.now() on Android Phone
 - Display name: ADHD MOM; keep applicationId/package unchanged.
-- After every item: run `./gradlew :composeApp:test` and `./gradlew :composeApp:testDebugUnitTest`, and fix failures before moving on.
+- After every item: run `./gradlew :composeApp:assembleDebug`, `./gradlew :composeApp:test` and `./gradlew :composeApp:testDebugUnitTest`, and fix failures before moving on.
 - For each item: search the codebase for related modules first; if anything is unclear, ask follow-up questions until high confidence (>95%) before implementing.
 
 - [x] 1. Baseline mapping and guardrail setup. Map current navigation, data flow, and DI wiring; document where new screens, repositories, and storage should attach; add temporary stubs for iOS/desktop targets for any new Android-only features. After completion, run unit tests and fix failures. adhd_mom_baseline.md is in the /docs/ folder.

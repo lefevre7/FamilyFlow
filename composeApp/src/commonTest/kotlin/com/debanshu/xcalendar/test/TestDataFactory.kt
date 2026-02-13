@@ -2,6 +2,7 @@ package com.debanshu.xcalendar.test
 
 import com.debanshu.xcalendar.domain.model.Calendar
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.EventSource
 import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.User
 
@@ -87,6 +88,7 @@ object TestDataFactory {
         recurringRule: String? = null,
         reminderMinutes: List<Int> = listOf(15),
         color: Int = 0xFF2196F3.toInt(),
+        source: EventSource = EventSource.LOCAL,
     ) = Event(
         id = id,
         calendarId = calendarId,
@@ -101,6 +103,7 @@ object TestDataFactory {
         recurringRule = recurringRule,
         reminderMinutes = reminderMinutes,
         color = color,
+        source = source,
     )
 
     fun createEvents(

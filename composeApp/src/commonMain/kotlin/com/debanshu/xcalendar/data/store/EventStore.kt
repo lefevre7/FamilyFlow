@@ -8,8 +8,11 @@ import com.debanshu.xcalendar.data.localDataSource.model.EventReminderEntity
 import com.debanshu.xcalendar.data.remoteDataSource.RemoteCalendarApiService
 import com.debanshu.xcalendar.data.remoteDataSource.Result
 import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.usecase.google.GetAllGoogleAccountsUseCase
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.runBlocking
 import org.mobilenativefoundation.store.store5.Bookkeeper
 import org.mobilenativefoundation.store.store5.Converter
 import org.mobilenativefoundation.store.store5.Fetcher
@@ -21,7 +24,7 @@ import org.mobilenativefoundation.store.store5.UpdaterResult
 
 /**
  * Creates a MutableStore for events that handles:
- * - Fetching from the remote API
+ * - Fetching from the remote API (disabled when Google Calendar is connected)
  * - Caching to Room database
  * - Write operations (create, update, delete) with network sync
  */
@@ -30,7 +33,7 @@ object EventStoreFactory {
     fun create(
         apiService: RemoteCalendarApiService,
         eventDao: EventDao,
-        bookkeeper: Bookkeeper<EventKey>
+        bookkeeper: Bookkeeper<EventKey>,
     ): MutableStore<EventKey, List<Event>> {
         return MutableStoreBuilder.from(
             fetcher = createFetcher(apiService),
@@ -50,25 +53,25 @@ object EventStoreFactory {
             .fromOutputToLocal { it }
             .build()
 
+    /**
+     * Fetcher for demo/test data only.
+     * 
+     * RemoteCalendarApiService provides dummy events from GitHub (assets/events.json)
+     * for testing and development. In production, this returns empty list because:
+     * 1. Real data comes from GoogleCalendarApi (EventSource.GOOGLE)
+     * 2. User-created data comes from local Room DB (EventSource.LOCAL)
+     * 3. EventRepository is the single decision point for filtering by EventSource
+     * 
+     * When adding new calendar sources (e.g., iCal), only EventRepository needs changes.
+     */
+    @Suppress("UNUSED_PARAMETER")
     private fun createFetcher(
-        apiService: RemoteCalendarApiService
+        apiService: RemoteCalendarApiService,
     ): Fetcher<EventKey, List<Event>> = Fetcher.of { key ->
-        AppLogger.d { "Fetching events for user ${key.userId}, range ${key.startTime}-${key.endTime}" }
-        when (val response = apiService.fetchEventsForCalendar(
-            calendarIds = emptyList(),
-            startTime = key.startTime,
-            endTime = key.endTime
-        )) {
-            is Result.Error -> {
-                AppLogger.e { "Failed to fetch events: ${response.error}" }
-                throw StoreException("Failed to fetch events: ${response.error}")
-            }
-            is Result.Success -> {
-                AppLogger.d { "Fetched ${response.data.size} events" }
-                EventValidator.recordFetch(key)
-                response.data.map { it.asEvent() }
-            }
-        }
+        // RemoteCalendarApiService is for testing/demo only.
+        // EventRepository handles all production filtering logic.
+        AppLogger.d { "Fetcher: Returning empty list (demo API disabled in production)" }
+        emptyList()
     }
 
     private fun createSourceOfTruth(
