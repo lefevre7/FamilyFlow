@@ -17,7 +17,7 @@ import com.skydoves.landscapist.coil3.CoilImage
 import kotlinx.datetime.Month
 
 private fun getMonthImageUrl(month: Month): String {
-    val baseUrl = "https://raw.githubusercontent.com/Debanshu777/XCalendar/main/assets/"
+    val baseUrl = "https://raw.githubusercontent.com/lefevre7/FamilyFlow/main/assets/"
 
     return when (month) {
         Month.JANUARY -> "${baseUrl}January.jpg"

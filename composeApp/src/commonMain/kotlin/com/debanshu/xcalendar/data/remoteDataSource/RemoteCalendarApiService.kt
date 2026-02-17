@@ -13,7 +13,7 @@ class RemoteCalendarApiService(
     json: Json,
 ) {
     private val clientWrapper = ClientWrapper(client, json)
-    private val baseUrl = "https://raw.githubusercontent.com/Debanshu777/XCalendar/main/"
+    private val baseUrl = "https://raw.githubusercontent.com/lefevre7/FamilyFlow/main/"
 
     suspend fun fetchCalendarsForUser(userId: String): Result<List<CalendarResponseItem>, DataError> =
         clientWrapper.networkGetUsecase<List<CalendarResponseItem>>(
