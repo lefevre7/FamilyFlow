@@ -68,6 +68,33 @@ Note: this project currently uses a single `ClientId` value from `local.properti
    - `adb shell am start -n com.debanshu.xcalendar/.MainActivity`
 5. On first launch, complete or skip onboarding, then land on Today view.
 
+**App Icon Generation**
+
+To update the Family Flow app icons from a new source image:
+
+1. Place your source icon image (ideally 1024x1024 or larger, square or rectangular) in an accessible location
+2. Run the icon generation script:
+   ```bash
+   ./generate_icons.sh /path/to/your/icon.png
+   ```
+3. The script will:
+   - Fit the entire source image into a square (1024x1024) with padding to preserve aspect ratio
+   - Generate all Android launcher icons (mdpi through xxxhdpi)
+   - Generate Android round launcher icons
+   - Generate adaptive icon foregrounds
+   - Generate iOS app icon (1024x1024)
+   - Padding uses white background; adaptive icons use `#F9F7F2` (calm beige) background layer
+4. Rebuild the app:
+   ```bash
+   ./gradlew :composeApp:assembleDebug
+   ```
+
+**Icon Specifications**
+- Android launcher icons: 48dp-192dp (mdpi through xxxhdpi)
+- Android adaptive foreground: 108dp-432dp
+- iOS app icon: 1024x1024
+- Background color: `#F9F7F2` (calm beige, defined in colors.xml)
+
 **Build And Test**
 1. Build: `./gradlew :composeApp:assembleDebug`
 2. Unit tests: `./gradlew :composeApp:test`
