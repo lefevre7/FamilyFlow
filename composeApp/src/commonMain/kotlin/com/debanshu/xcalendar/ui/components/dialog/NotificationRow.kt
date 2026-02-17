@@ -40,7 +40,7 @@ internal fun NotificationRow(
         Icon(
             painter = painterResource(Res.drawable.ic_notifications),
             contentDescription = null,
-            tint = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            tint = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(modifier = Modifier.width(16.dp))
@@ -55,7 +55,7 @@ internal fun NotificationRow(
         Icon(
             painter = painterResource(Res.drawable.ic_unfold_more),
             contentDescription = null,
-            tint = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+            tint = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -94,7 +94,7 @@ internal fun EventOptionRow(
         Icon(
             painter = painterResource(icon),
             contentDescription = null,
-            tint = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            tint = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(modifier = Modifier.width(16.dp))

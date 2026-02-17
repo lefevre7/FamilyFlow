@@ -66,6 +66,7 @@ import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskUseCase
+import com.debanshu.xcalendar.domain.util.GoogleEventDeduplication
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.platform.PlatformFeatures
 import com.debanshu.xcalendar.platform.PlatformNotifier
@@ -227,8 +228,9 @@ fun TodayScreen(
         start to end
     }
 
-    val eventsForDay = remember(events, dayStart, dayEnd) {
-        events.filter { overlaps(it.startTime, it.endTime, dayStart, dayEnd) }
+    val displayEvents = remember(events) { GoogleEventDeduplication.dedupeForDisplay(events) }
+    val eventsForDay = remember(displayEvents, dayStart, dayEnd) {
+        displayEvents.filter { overlaps(it.startTime, it.endTime, dayStart, dayEnd) }
     }
 
     val tasksForDay = remember(tasks, dayStart, dayEnd) {
@@ -407,7 +409,7 @@ fun TodayScreen(
     val onShareItem: (ScheduleItem) -> Unit = remember(notifier, peopleById, timeZone) {
         { item ->
             notifier.shareText(
-                subject = "ADHD MOM - Today item",
+                subject = "Family Flow - Today item",
                 text = buildItemShareText(item = item, peopleById = peopleById, timeZone = timeZone),
             )
         }
@@ -438,7 +440,7 @@ fun TodayScreen(
             todayOnlyEnabled = isToday,
             onShareSnapshot = {
                 notifier.shareText(
-                    subject = "ADHD MOM - Today's snapshot",
+                    subject = "Family Flow - Today's snapshot",
                     text = snapshotText,
                 )
             },

@@ -12,8 +12,6 @@ import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import kotlinx.coroutines.flow.first
 import org.koin.core.annotation.Factory
 import kotlin.time.Clock
-import kotlin.uuid.ExperimentalUuidApi
-import kotlin.uuid.Uuid
 
 @Factory
 class ResolveSyncConflictUseCase(
@@ -22,7 +20,6 @@ class ResolveSyncConflictUseCase(
     private val eventRepository: IEventRepository,
     private val conflictStateHolder: SyncConflictStateHolder,
 ) {
-    @OptIn(ExperimentalUuidApi::class)
     suspend operator fun invoke(conflict: SyncConflict, action: SyncResolutionAction) {
         val source = getCalendarSourceUseCase(conflict.calendarId).first() ?: return
         val now = Clock.System.now().toEpochMilliseconds()
@@ -44,17 +41,6 @@ class ResolveSyncConflictUseCase(
             SyncResolutionAction.KEEP_REMOTE -> {
                 val updated = conflict.remoteEvent.mergeInto(conflict.localEvent, now)
                 eventRepository.updateEvent(updated)
-            }
-            SyncResolutionAction.DUPLICATE -> {
-                val duplicate =
-                    conflict.remoteEvent.toLocalDuplicate(
-                        calendarId = conflict.calendarId,
-                        calendarName = conflict.localEvent.calendarName,
-                        color = conflict.localEvent.color,
-                        syncedAt = now,
-                        affectedPersonIds = conflict.localEvent.affectedPersonIds,
-                    )
-                eventRepository.addEvent(duplicate)
             }
         }
         conflictStateHolder.resolveConflict(conflict)
@@ -84,34 +70,5 @@ class ResolveSyncConflictUseCase(
             source = EventSource.GOOGLE,
             externalUpdatedAt = updatedAt,
             lastSyncedAt = syncedAt,
-        )
-
-    @OptIn(ExperimentalUuidApi::class)
-    private fun ExternalEvent.toLocalDuplicate(
-        calendarId: String,
-        calendarName: String,
-        color: Int,
-        syncedAt: Long,
-        affectedPersonIds: List<String>,
-    ): Event =
-        Event(
-            id = Uuid.random().toString(),
-            calendarId = calendarId,
-            calendarName = calendarName,
-            title = summary,
-            description = description,
-            location = location,
-            startTime = startTime,
-            endTime = endTime,
-            isAllDay = isAllDay,
-            isRecurring = false,
-            recurringRule = null,
-            reminderMinutes = emptyList(),
-            color = color,
-            source = EventSource.GOOGLE,
-            externalId = id,
-            externalUpdatedAt = updatedAt,
-            lastSyncedAt = syncedAt,
-            affectedPersonIds = affectedPersonIds,
         )
 }

@@ -68,7 +68,7 @@ internal fun CalendarSelectionSection(
             Text(
                 text = user.email,
                 style = XCalendarTheme.typography.bodySmall,
-                color = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
             )
         }
 

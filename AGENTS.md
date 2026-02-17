@@ -1,4 +1,4 @@
-# AGENTS TODO — ADHD MOM (Family Flow)
+# AGENTS TODO — Family Flow
 
 Guardrails
 - Android-first; keep KMP compiling with stubs for iOS/desktop.
@@ -8,7 +8,7 @@ Guardrails
 - LLM: LiteRT-LM (Gemma3) with asset pack + `media.githubusercontent.com` download fallback.
 - OCR: Tesseract4Android, `eng.traineddata` bundled in APK.
 - If you ever need to use Clock.System.now(), use System.nanoTime() instead as this runs on an Android Phone and there is no Clock.System.now() on Android Phone
-- Display name: ADHD MOM; keep applicationId/package unchanged.
+- Display name: Family Flow; keep applicationId/package unchanged.
 - After every item: run `./gradlew :composeApp:assembleDebug`, `./gradlew :composeApp:test` and `./gradlew :composeApp:testDebugUnitTest`, and fix failures before moving on.
 - For each item: search the codebase for related modules first; if anything is unclear, ask follow-up questions until high confidence (>95%) before implementing.
 
@@ -25,11 +25,11 @@ Guardrails
 - [x] 11. LiteRT-LM integration. Port the StockSignal LiteRT-LM runtime and model management (asset pack + download fallback); add model download UI/flow; integrate GPU/CPU fallback and incompatibility handling; expose LLM service to OCR + brain dump processing. After completion, run unit tests and fix failures.
 - [x] 12. Google Calendar import + sync. Add OAuth flow (client IDs from `local.properties`), selected calendar import, two-way sync, and background refresh (manual + 6h); add conflict resolution sheet with suggested actions. After completion, run unit tests and fix failures.
 - [x] 13. Reminders, timers, and widgets. Implement prep/start notifications, optional travel-time buffer (location permission), visual timers, and widgets (Today snapshot + Quick-add). After completion, run unit tests and fix failures.
-- [x] 14. Theme and branding. Retune Material3 Expressive to calm palette and reduced motion defaults; update typography sizes; rename display name to ADHD MOM; replace launcher icon. After completion, run unit tests and fix failures.
+- [x] 14. Theme and branding. Retune Material3 Expressive to calm palette and reduced motion defaults; update typography sizes; rename display name to Family Flow; replace launcher icon. After completion, run unit tests and fix failures.
 - [x] 15. Add/expand tests (penultimate step). Add unit tests for schedule aggregation, suggestion engine, OCR parsing, LLM JSON validation, and quick-add; add Robolectric tests for Today grouping and quick-add flow; run all tests and fix failures.
 - [x] 16. Cleanup and stabilization. Remove dead code, update docs/README, resolve warnings where feasible, ensure KMP stubs are safe, and re-run all tests. After completion, run unit tests and fix failures.
 
-- [x] 17. Spec conformance re-audit for items 1-16. Re-verify each completed item against the original Family Flow spec (ADHD behavior, UX friction, and data semantics), produce a gap matrix in `docs/` with file-level ownership, and map every open gap to items 18+ below before coding. Completed in `docs/adhd_mom_spec_conformance_matrix.md`.
+- [x] 17. Spec conformance re-audit for items 1-16. Re-verify each completed item against the original Family Flow spec (ADHD behavior, UX friction, and data semantics), produce a gap matrix in `docs/` with file-level ownership, and map every open gap to items 18+ below before coding. Completed in `docs/family_flow_spec_conformance_matrix.md`.
 - [x] 18. Event people ownership + Who's Affected (no DB migration). Added `affectedPersonIds` at domain level, sidecar persistence via `IEventPeopleRepository` (DataStore on Android + KMP stubs), create/sync/conflict paths wired to preserve mappings, and "Who's affected" labels shown on Today/Week/Plan/detail cards.
 - [x] 19. Persistent shared lens architecture. Added shared `Family | Mom | Person` lens model/state (`LensStateHolder`) backed by persistent lens preferences (Android DataStore + desktop/iOS stubs), wired Today/Week/Plan to the shared state, and introduced reusable avatar-aware mini-header component (`FamilyLensMiniHeader`).
 - [x] 20. Today Survival action completion. Wired `Done`, `Snooze`, and `Share` actions in Today cards (task completion persisted, task/event snooze handling, item share), enforced strict Today Only behavior (`active now` OR `starts within +/-30 minutes`), preserved sticky routines, and added shareable Today snapshot flow via Android sharesheet (`text/plain`, SMS/WhatsApp compatible).

@@ -1,4 +1,4 @@
-# ADHD MOM Spec Conformance Matrix (Items 1-16)
+# Family Flow Spec Conformance Matrix (Items 1-16)
 
 Audit date: 2026-02-09
 

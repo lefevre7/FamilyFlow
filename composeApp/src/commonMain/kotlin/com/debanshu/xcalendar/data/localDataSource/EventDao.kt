@@ -16,13 +16,13 @@ import kotlinx.coroutines.flow.Flow
 interface EventDao {
     @Query("SELECT * FROM events " +
             "INNER JOIN calendars ON events.calendarId = calendars.id "+
-            "WHERE calendars.userId = :userId AND startTime >= :startTime AND endTime <= :endTime")
+            "WHERE calendars.userId = :userId AND endTime > :startTime AND startTime < :endTime")
     fun getEventsBetweenDates(userId: String, startTime: Long, endTime: Long): Flow<List<EventEntity>>
 
     @Transaction
     @Query("SELECT events.* FROM events " +
             "INNER JOIN calendars ON events.calendarId = calendars.id " +
-            "WHERE calendars.userId = :userId AND startTime >= :startTime AND endTime <= :endTime")
+            "WHERE calendars.userId = :userId AND endTime > :startTime AND startTime < :endTime")
     fun getEventsWithRemindersBetweenDates(userId: String, startTime: Long, endTime: Long): Flow<List<EventWithReminders>>
 
     @Query("SELECT * FROM events WHERE id = :eventId")

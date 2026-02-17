@@ -1,4 +1,4 @@
-# ADHD MOM (Family Flow)
+# Family Flow
 
 A family-first mental offloading scheduling app built for a mom with ADHD. The app reduces cognitive load by organizing people-first schedules into clear execution views, with capture-first flows and conservative automation.
 
@@ -150,7 +150,7 @@ Instrumented tests run on an Android emulator or physical device and provide com
 **Permission Setup**
 - Voice capture tests use `@get:Rule val permissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)`
 - Ensure permissions are granted before executing permission-dependent flows
-- If tests fail with permission errors, check emulator permission settings (Settings → Apps → ADHD MOM → Permissions)
+- If tests fail with permission errors, check emulator permission settings (Settings → Apps → Family Flow → Permissions)
 
 **Flakiness Reduction**
 - Use `hasContentDescription()` matchers instead of exact text matching when content is dynamic

@@ -35,6 +35,7 @@ import com.debanshu.xcalendar.ui.screen.onboardingScreen.OnboardingScreen
 import com.debanshu.xcalendar.ui.state.DateStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.viewmodel.EventViewModel
+import com.debanshu.xcalendar.platform.getSystemAccessibility
 import com.debanshu.xcalendar.domain.model.User
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
@@ -117,6 +118,7 @@ private fun CalendarApp(
     var showOnboarding by rememberSaveable { mutableStateOf(showOnboardingInitially) }
     var dockPositionX by rememberSaveable { mutableStateOf(0.5f) }
     var dockPositionY by rememberSaveable { mutableStateOf(1f) }
+    var showDragHint by rememberSaveable { mutableStateOf(true) }
     val quickAddRequest = quickAddRequests?.collectAsState(initial = null)?.value
 
     LaunchedEffect(quickAddRequest) {
@@ -140,8 +142,13 @@ private fun CalendarApp(
     // Combine error messages from both ViewModels
     val displayError = calendarUiState.displayError ?: eventUiState.errorMessage
 
+    // Auto-detect system high-contrast preference
+    val systemAccessibility = remember { getSystemAccessibility() }
+    val systemHighContrast = systemAccessibility.isHighContrastEnabled()
+    val effectiveHighContrast = reminderPreferences.highContrastEnabled || systemHighContrast
+
     XCalendarTheme(
-        highContrastEnabled = reminderPreferences.highContrastEnabled,
+        highContrastEnabled = effectiveHighContrast,
         reducedMotionEnabled = reminderPreferences.reducedMotionEnabled,
         textScale = reminderPreferences.textScale,
     ) {
@@ -213,6 +220,8 @@ private fun CalendarApp(
                             dockPositionX = position.x
                             dockPositionY = position.y
                         },
+                        showDragHint = showDragHint && !showOnboarding,
+                        onDismissDragHint = { showDragHint = false },
                     )
                 }
                 if (showQuickAddSheet) {

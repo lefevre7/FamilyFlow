@@ -1,6 +1,7 @@
 package com.debanshu.xcalendar.domain.repository
 
 import com.debanshu.xcalendar.common.convertStringToColor
+import com.debanshu.xcalendar.common.getCuratedPersonColor
 import com.debanshu.xcalendar.common.model.asPerson
 import com.debanshu.xcalendar.common.model.asPersonEntity
 import com.debanshu.xcalendar.data.localDataSource.PersonDao
@@ -112,7 +113,7 @@ class PersonRepository(
             name = name,
             role = role,
             ageYears = ageYears,
-            color = convertStringToColor(id + name),
+            color = getCuratedPersonColor(sortOrder),
             avatarUrl = "",
             isAdmin = isAdmin,
             isDefault = isDefault,

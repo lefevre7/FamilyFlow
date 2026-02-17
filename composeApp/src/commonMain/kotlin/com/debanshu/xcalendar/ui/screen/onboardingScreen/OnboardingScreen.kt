@@ -151,7 +151,7 @@ fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             Text(
-                text = "ADHD MOM",
+                text = "Family Flow",
                 style = XCalendarTheme.typography.headlineLarge,
                 color = XCalendarTheme.colorScheme.onSurface,
             )

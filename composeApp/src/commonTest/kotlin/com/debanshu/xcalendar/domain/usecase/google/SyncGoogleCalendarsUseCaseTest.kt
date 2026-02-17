@@ -5,6 +5,8 @@ import com.debanshu.xcalendar.domain.auth.GoogleTokenStore
 import com.debanshu.xcalendar.domain.model.Calendar
 import com.debanshu.xcalendar.domain.model.CalendarProvider
 import com.debanshu.xcalendar.domain.model.CalendarSource
+import com.debanshu.xcalendar.domain.model.Event
+import com.debanshu.xcalendar.domain.model.EventSource
 import com.debanshu.xcalendar.domain.model.ExternalCalendar
 import com.debanshu.xcalendar.domain.model.ExternalEvent
 import com.debanshu.xcalendar.domain.model.GoogleAccountLink
@@ -17,7 +19,11 @@ import com.debanshu.xcalendar.domain.usecase.calendarSource.GetAllCalendarSource
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.test.FakeEventRepository
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -85,6 +91,50 @@ class SyncGoogleCalendarsUseCaseTest {
             timeMin: Long,
             timeMax: Long,
         ): List<ExternalEvent> = remoteEvents
+
+        override suspend fun createEvent(
+            accountId: String,
+            calendarId: String,
+            event: ExternalEvent,
+        ): ExternalEvent? = event
+
+        override suspend fun updateEvent(
+            accountId: String,
+            calendarId: String,
+            eventId: String,
+            event: ExternalEvent,
+        ): ExternalEvent? = event
+
+        override suspend fun deleteEvent(
+            accountId: String,
+            calendarId: String,
+            eventId: String,
+        ): Boolean = true
+    }
+
+    private class TrackingCalendarSyncManager(
+        private val remoteEvents: List<ExternalEvent>,
+        private val delayMs: Long,
+    ) : CalendarSyncManager {
+        var activeCalls: Int = 0
+        var maxConcurrentCalls: Int = 0
+
+        override suspend fun listCalendars(accountId: String): List<ExternalCalendar> = emptyList()
+
+        override suspend fun listEvents(
+            accountId: String,
+            calendarId: String,
+            timeMin: Long,
+            timeMax: Long,
+        ): List<ExternalEvent> {
+            activeCalls += 1
+            if (activeCalls > maxConcurrentCalls) {
+                maxConcurrentCalls = activeCalls
+            }
+            delay(delayMs)
+            activeCalls -= 1
+            return remoteEvents
+        }
 
         override suspend fun createEvent(
             accountId: String,
@@ -183,5 +233,147 @@ class SyncGoogleCalendarsUseCaseTest {
         assertEquals(listOf("person_mom"), created.affectedPersonIds)
         assertEquals("Category: school\nBring snacks", created.description)
         assertTrue(conflictStateHolder.conflicts.value.isEmpty())
+    }
+
+    @Test
+    fun sync_deduplicatesGoogleEventsByExternalId_andMergesPeopleAndReminders() = runTest {
+        val userId = GetCurrentUserUseCase().invoke()
+        val source =
+            CalendarSource(
+                calendarId = "local-cal-1",
+                provider = CalendarProvider.GOOGLE,
+                providerCalendarId = "google-cal-1",
+                providerAccountId = "account-1",
+            )
+        val calendar =
+            Calendar(
+                id = "local-cal-1",
+                name = "Family",
+                color = 0,
+                userId = userId,
+            )
+        val account =
+            GoogleAccountLink(
+                id = "account-1",
+                email = "mom@example.com",
+                personId = "person_mom",
+            )
+        val baseTime = Clock.System.now().toEpochMilliseconds() + 60_000L
+        val winnerCandidate =
+            Event(
+                id = "event-winner",
+                calendarId = "local-cal-1",
+                calendarName = "Family",
+                title = "Pickup",
+                startTime = baseTime,
+                endTime = baseTime + 3_600_000L,
+                reminderMinutes = listOf(30),
+                color = 0,
+                source = EventSource.GOOGLE,
+                externalId = "remote-1",
+                externalUpdatedAt = 10_000L,
+                lastSyncedAt = 20_000L,
+                affectedPersonIds = listOf("person_mom"),
+            )
+        val duplicate =
+            winnerCandidate.copy(
+                id = "event-duplicate",
+                reminderMinutes = listOf(10),
+                affectedPersonIds = listOf("person_kid_1"),
+            )
+        val remoteEvent =
+            ExternalEvent(
+                id = "remote-1",
+                summary = "Pickup",
+                description = null,
+                startTime = baseTime,
+                endTime = baseTime + 3_600_000L,
+                isAllDay = false,
+                updatedAt = 10_000L,
+            )
+        val tokenStore =
+            FakeGoogleTokenStore().apply {
+                saveTokens("account-1", GoogleAuthTokens(accessToken = "token"))
+            }
+        val eventRepository = FakeEventRepository(initialEvents = listOf(winnerCandidate, duplicate))
+        val useCase =
+            SyncGoogleCalendarsUseCase(
+                syncManager = FakeCalendarSyncManager(listOf(remoteEvent)),
+                getAllCalendarSourcesUseCase = GetAllCalendarSourcesUseCase(FakeCalendarSourceRepository(listOf(source))),
+                getGoogleAccountByIdUseCase = GetGoogleAccountByIdUseCase(FakeGoogleAccountRepository(account)),
+                getUserCalendarsUseCase = GetUserCalendarsUseCase(FakeCalendarRepository(listOf(calendar))),
+                getCurrentUserUseCase = GetCurrentUserUseCase(),
+                eventRepository = eventRepository,
+                conflictStateHolder = SyncConflictStateHolder(),
+                tokenStore = tokenStore,
+            )
+
+        useCase(manual = false)
+
+        val remaining = eventRepository.getEventsForCalendarsInRange(userId, 0L, Long.MAX_VALUE).first()
+        assertEquals(1, remaining.size)
+        assertEquals("event-winner", remaining.single().id)
+        assertEquals(listOf(30, 10), remaining.single().reminderMinutes)
+        assertEquals(listOf("person_mom", "person_kid_1"), remaining.single().affectedPersonIds)
+        assertEquals(1, eventRepository.deletedEvents.size)
+        assertEquals("event-duplicate", eventRepository.deletedEvents.single().id)
+    }
+
+    @Test
+    fun sync_runsSingleFlight_withConcurrentCalls() = runTest {
+        val userId = GetCurrentUserUseCase().invoke()
+        val source =
+            CalendarSource(
+                calendarId = "local-cal-1",
+                provider = CalendarProvider.GOOGLE,
+                providerCalendarId = "google-cal-1",
+                providerAccountId = "account-1",
+            )
+        val calendar =
+            Calendar(
+                id = "local-cal-1",
+                name = "Family",
+                color = 0,
+                userId = userId,
+            )
+        val account =
+            GoogleAccountLink(
+                id = "account-1",
+                email = "mom@example.com",
+                personId = "person_mom",
+            )
+        val remoteEvent =
+            ExternalEvent(
+                id = "remote-1",
+                summary = "Pickup",
+                description = null,
+                startTime = 1_000_000L,
+                endTime = 2_000_000L,
+                isAllDay = false,
+                updatedAt = 1_000L,
+            )
+        val trackingSyncManager = TrackingCalendarSyncManager(remoteEvents = listOf(remoteEvent), delayMs = 50)
+        val tokenStore =
+            FakeGoogleTokenStore().apply {
+                saveTokens("account-1", GoogleAuthTokens(accessToken = "token"))
+            }
+        val useCase =
+            SyncGoogleCalendarsUseCase(
+                syncManager = trackingSyncManager,
+                getAllCalendarSourcesUseCase = GetAllCalendarSourcesUseCase(FakeCalendarSourceRepository(listOf(source))),
+                getGoogleAccountByIdUseCase = GetGoogleAccountByIdUseCase(FakeGoogleAccountRepository(account)),
+                getUserCalendarsUseCase = GetUserCalendarsUseCase(FakeCalendarRepository(listOf(calendar))),
+                getCurrentUserUseCase = GetCurrentUserUseCase(),
+                eventRepository = FakeEventRepository(),
+                conflictStateHolder = SyncConflictStateHolder(),
+                tokenStore = tokenStore,
+            )
+
+        awaitAll(
+            async { useCase(manual = false) },
+            async { useCase(manual = false) },
+        )
+
+        assertEquals(1, trackingSyncManager.maxConcurrentCalls)
     }
 }

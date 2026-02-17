@@ -29,8 +29,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -82,8 +84,10 @@ import xcalendar.composeapp.generated.resources.ic_add
 import xcalendar.composeapp.generated.resources.ic_calendar_view_day
 import xcalendar.composeapp.generated.resources.ic_calendar_view_schedule
 import xcalendar.composeapp.generated.resources.ic_calendar_view_week
+import xcalendar.composeapp.generated.resources.ic_close
 import xcalendar.composeapp.generated.resources.ic_description
 import xcalendar.composeapp.generated.resources.ic_notifications
+import xcalendar.composeapp.generated.resources.ic_unfold_more
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -325,6 +329,8 @@ internal fun CalendarBottomNavigationBar(
     onAddVoiceShortcut: (() -> Unit)? = null,
     dockPosition: DockPositionFractions = DockPositionFractions(),
     onDockPositionChange: (DockPositionFractions) -> Unit = {},
+    showDragHint: Boolean = false,
+    onDismissDragHint: () -> Unit = {},
 ) {
     val sharedTransitionScope = LocalSharedTransitionScope.current
     val coroutineScope = rememberCoroutineScope()
@@ -336,6 +342,7 @@ internal fun CalendarBottomNavigationBar(
     val currentOnAddEventShortcut by rememberUpdatedState(onAddEventShortcut)
     val currentOnAddVoiceShortcut by rememberUpdatedState(onAddVoiceShortcut)
     val currentOnDockPositionChange by rememberUpdatedState(onDockPositionChange)
+    val currentOnDismissDragHint by rememberUpdatedState(onDismissDragHint)
     var showAddShortcuts by remember { mutableStateOf(false) }
 
     val navItems =
@@ -479,6 +486,23 @@ internal fun CalendarBottomNavigationBar(
                         shortcutAnchorOffsetPx = shortcutAnchorOffsetPx,
                     )
                 }
+
+            // Draggable hint positioned above the dock
+            if (showDragHint) {
+                val hintOffsetY = with(density) { -80.dp.toPx() }
+                DraggableHintCard(
+                    modifier =
+                        Modifier
+                            .width(dockWidth)
+                            .offset {
+                                androidx.compose.ui.unit.IntOffset(
+                                    dockOffsetPx.x.roundToInt(),
+                                    (dockOffsetPx.y + hintOffsetY).roundToInt(),
+                                )
+                            },
+                    onDismiss = currentOnDismissDragHint,
+                )
+            }
 
             Row(
                 modifier =
@@ -766,5 +790,48 @@ private fun RowScope.BottomNavItem(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+@Composable
+private fun DraggableHintCard(
+    modifier: Modifier = Modifier,
+    onDismiss: () -> Unit,
+) {
+    Card(
+        modifier =
+            modifier
+                .testTag("drag_hint_card"),
+        shape = RoundedCornerShape(12.dp),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                painter = painterResource(Res.drawable.ic_unfold_more),
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+                tint = XCalendarTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Drag the bottom nav to move it anywhere on screen.",
+                style = XCalendarTheme.typography.bodySmall,
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier.size(24.dp),
+            ) {
+                Icon(
+                    painter = painterResource(Res.drawable.ic_close),
+                    contentDescription = "Dismiss hint",
+                    modifier = Modifier.size(18.dp),
+                    tint = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
     }
 }

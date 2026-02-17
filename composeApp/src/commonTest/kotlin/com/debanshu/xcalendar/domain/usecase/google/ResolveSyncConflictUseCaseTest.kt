@@ -71,7 +71,7 @@ class ResolveSyncConflictUseCaseTest {
     }
 
     @Test
-    fun duplicateResolution_keepsAffectedPeopleMapping() = runTest {
+    fun keepRemoteResolution_updatesLocalAndClearsConflict() = runTest {
         val localEvent =
             Event(
                 id = "local-1",
@@ -118,10 +118,11 @@ class ResolveSyncConflictUseCaseTest {
                 conflictStateHolder = conflictStateHolder,
             )
 
-        useCase(conflict, SyncResolutionAction.DUPLICATE)
+        useCase(conflict, SyncResolutionAction.KEEP_REMOTE)
 
-        val duplicate = eventRepository.addedEvents.single()
-        assertEquals(localEvent.affectedPersonIds, duplicate.affectedPersonIds)
+        val updated = eventRepository.updatedEvents.single()
+        assertEquals("Pickup from Google", updated.title)
+        assertEquals(localEvent.affectedPersonIds, updated.affectedPersonIds)
         assertTrue(conflictStateHolder.conflicts.value.isEmpty())
     }
 }

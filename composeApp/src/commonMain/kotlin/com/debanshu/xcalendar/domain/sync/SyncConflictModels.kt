@@ -12,5 +12,4 @@ data class SyncConflict(
 enum class SyncResolutionAction {
     KEEP_LOCAL,
     KEEP_REMOTE,
-    DUPLICATE,
 }

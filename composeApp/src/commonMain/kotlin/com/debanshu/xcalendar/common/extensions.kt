@@ -116,7 +116,23 @@ fun formatTimeRange(
 fun Int.isLeap(): Boolean = (this % 4 == 0 && this % 100 != 0) || (this % 400 == 0)
 
 /*
+ * Curated feminine color palette for person avatars
+ * Returns colors from a predefined set: rose, lavender, peach, coral, mint
+ */
+fun getCuratedPersonColor(sortOrder: Int): Int {
+    val curatedColors = listOf(
+        0xFFE5A3B8.toInt(), // Rose pink
+        0xFFB497BD.toInt(), // Lavender
+        0xFFF0B89E.toInt(), // Warm peach
+        0xFFE39B9B.toInt(), // Coral pink
+        0xFF9DC9B8.toInt(), // Soft mint
+    )
+    return curatedColors[sortOrder % curatedColors.size]
+}
+
+/*
  * Extension function to convert a string to a color
+ * Note: Kept for backward compatibility, but getCuratedPersonColor is preferred for person avatars
  */
 fun convertStringToColor(
     string: String,

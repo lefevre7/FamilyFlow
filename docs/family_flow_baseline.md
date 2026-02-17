@@ -1,6 +1,6 @@
-# ADHD MOM baseline map
+# Family Flow baseline map
 
-This file records the current XCalendar architecture and where ADHD MOM features attach.
+This file records the current XCalendar architecture and where Family Flow features attach.
 
 ## Current navigation
 - Entry composable: `composeApp/src/commonMain/kotlin/com/debanshu/xcalendar/CalendarApp.kt`.
@@ -24,7 +24,7 @@ This file records the current XCalendar architecture and where ADHD MOM features
   `composeApp/src/iosMain/kotlin/com/debanshu/xcalendar/di/`, and
   `composeApp/src/desktopMain/kotlin/com/debanshu/xcalendar/di/`.
 
-## ADHD MOM integration points
+## Family Flow integration points
 - New navigation keys in `composeApp/src/commonMain/kotlin/com/debanshu/xcalendar/ui/navigation/NavigableScreen.kt`.
 - New screens in `composeApp/src/commonMain/kotlin/com/debanshu/xcalendar/ui/screen/`:
   Today, Week (new layout), Plan, People, Settings.

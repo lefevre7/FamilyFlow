@@ -217,7 +217,7 @@ fun SettingsScreen(
                     if (requested) {
                         "Widget pin request sent. Choose where to place it on Home screen."
                     } else {
-                        "Pin request unavailable on this launcher. Long press Home > Widgets > ADHD MOM."
+                        "Pin request unavailable on this launcher. Long press Home > Widgets > Family Flow."
                     }
             },
         )
@@ -294,7 +294,7 @@ fun SettingsScreen(
             onShareLatest = {
                 val payload = latestDiagnosticPayload ?: return@VoiceDiagnosticsSection
                 notifier.shareText(
-                    subject = "ADHD MOM - Voice diagnostics",
+                    subject = "Family Flow - Voice diagnostics",
                     text = payload,
                 )
             },
@@ -353,7 +353,7 @@ private fun WidgetSection(
                 }
                 if (!canRequestPin) {
                     Text(
-                        text = "If this button is disabled, long press Home > Widgets > ADHD MOM.",
+                        text = "If this button is disabled, long press Home > Widgets > Family Flow.",
                         style = XCalendarTheme.typography.bodySmall,
                         color = XCalendarTheme.colorScheme.onSurfaceVariant,
                     )
@@ -776,7 +776,7 @@ internal fun buildLatestVoiceDiagnosticPayload(entries: List<VoiceDiagnosticEntr
     if (sessionEntries.isEmpty()) return null
 
     return buildString {
-        appendLine("ADHD MOM voice diagnostics")
+        appendLine("Family Flow voice diagnostics")
         appendLine("Session: $latestSessionId")
         sessionEntries.forEach { entry ->
             appendLine("")
@@ -873,9 +873,6 @@ private fun ConflictCard(
                 }
                 TextButton(onClick = { onResolve(conflict, SyncResolutionAction.KEEP_REMOTE) }) {
                     Text("Keep Google")
-                }
-                TextButton(onClick = { onResolve(conflict, SyncResolutionAction.DUPLICATE) }) {
-                    Text("Duplicate")
                 }
             }
         }

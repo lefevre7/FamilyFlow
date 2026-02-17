@@ -89,7 +89,7 @@ fun EventDetailsDialog(
             Text(
                 text = DateTimeFormatter.formatEventSubheading(event),
                 style = XCalendarTheme.typography.bodyMedium,
-                color = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 52.dp, end = 16.dp),
             )
 
@@ -162,13 +162,13 @@ private fun DetailsHeader(
             painter = painterResource(Res.drawable.ic_close),
             contentDescription = "Close",
             modifier = Modifier.clickable { onClose() },
-            tint = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            tint = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
         Icon(
             painter = painterResource(Res.drawable.ic_edit),
             contentDescription = "Edit",
             modifier = Modifier.clickable { onEdit() },
-            tint = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            tint = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
     }
 }
@@ -212,7 +212,7 @@ private fun EventTitleRow(
 private fun DetailRow(
     icon: org.jetbrains.compose.resources.DrawableResource,
     text: String,
-    iconTint: Color = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+    iconTint: Color = XCalendarTheme.colorScheme.onSurfaceVariant,
     textColor: Color = XCalendarTheme.colorScheme.onSurface,
     verticalAlignment: Alignment.Vertical = Alignment.CenterVertically,
 ) {

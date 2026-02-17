@@ -10,11 +10,14 @@ import com.debanshu.xcalendar.domain.repository.IEventRepository
 import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
 import com.debanshu.xcalendar.domain.sync.SyncConflict
 import com.debanshu.xcalendar.domain.util.ImportCategoryClassifier
+import com.debanshu.xcalendar.domain.util.GoogleEventDeduplication
 import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import com.debanshu.xcalendar.domain.usecase.calendar.GetUserCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.calendarSource.GetAllCalendarSourcesUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -38,111 +41,140 @@ class SyncGoogleCalendarsUseCase(
     private val conflictStateHolder: SyncConflictStateHolder,
     private val tokenStore: GoogleTokenStore,
 ) {
-    suspend operator fun invoke(manual: Boolean = false): List<SyncConflict> {
-        val userId = getCurrentUserUseCase()
-        val calendars = getUserCalendarsUseCase(userId).first()
-        val sources = getAllCalendarSourcesUseCase()
-            .filter { it.provider == CalendarProvider.GOOGLE && it.syncEnabled }
-        if (sources.isEmpty()) return emptyList()
+    suspend operator fun invoke(manual: Boolean = false): List<SyncConflict> =
+        syncMutex.withLock {
+            val userId = getCurrentUserUseCase()
+            val calendars = getUserCalendarsUseCase(userId).first()
+            val sources = getAllCalendarSourcesUseCase()
+                .filter { it.provider == CalendarProvider.GOOGLE && it.syncEnabled }
+            if (sources.isEmpty()) return@withLock emptyList()
 
-        val now = Clock.System.now().toEpochMilliseconds()
-        val range = buildSyncRange()
-        val events = eventRepository.getEventsForCalendarsInRange(userId, range.first, range.second)
-            .first()
-        val conflicts = mutableListOf<SyncConflict>()
+            val now = Clock.System.now().toEpochMilliseconds()
+            val range = buildSyncRange()
+            val events = eventRepository.getEventsForCalendarsInRange(userId, range.first, range.second)
+                .first()
+            val conflicts = mutableListOf<SyncConflict>()
 
-        sources.forEach { source ->
-            if (tokenStore.getTokens(source.providerAccountId) == null) return@forEach
-            val calendar = calendars.firstOrNull { it.id == source.calendarId } ?: return@forEach
-            val linkedAccount = getGoogleAccountByIdUseCase(source.providerAccountId)
-            val defaultPersonId = linkedAccount?.personId
-            val remoteEvents =
-                syncManager.listEvents(
-                    accountId = source.providerAccountId,
-                    calendarId = source.providerCalendarId,
-                    timeMin = range.first,
-                    timeMax = range.second,
-                )
-            val remoteIds = remoteEvents.map { it.id }.toSet()
-            val localForCalendar = events.filter { it.calendarId == source.calendarId }
-            val localByExternalId = localForCalendar.filter { !it.externalId.isNullOrBlank() }
-                .associateBy { it.externalId!! }
-            val localPending = localForCalendar
-                .filter { it.externalId.isNullOrBlank() }
-
-            localPending.forEach { pending ->
-                val remote =
-                    syncManager.createEvent(
+            sources.forEach { source ->
+                if (tokenStore.getTokens(source.providerAccountId) == null) return@forEach
+                val calendar = calendars.firstOrNull { it.id == source.calendarId } ?: return@forEach
+                val linkedAccount = getGoogleAccountByIdUseCase(source.providerAccountId)
+                val defaultPersonId = linkedAccount?.personId
+                val remoteEvents =
+                    syncManager.listEvents(
                         accountId = source.providerAccountId,
                         calendarId = source.providerCalendarId,
-                        event = pending.toExternalEventPlaceholder(),
+                        timeMin = range.first,
+                        timeMax = range.second,
                     )
-                if (remote != null) {
-                    val updated = pending.copy(
-                        externalId = remote.id,
-                        externalUpdatedAt = remote.updatedAt,
-                        lastSyncedAt = now,
-                    )
-                    eventRepository.updateEvent(updated)
-                }
-            }
+                val remoteIds = remoteEvents.map { it.id }.toSet()
 
-            remoteEvents.forEach { remote ->
-                val local = localByExternalId[remote.id]
-                if (remote.cancelled) {
-                    if (local != null) {
-                        eventRepository.deleteEvent(local)
-                    }
-                    return@forEach
-                }
-                if (local == null) {
-                    val created = remote.toLocalEvent(calendar, now, defaultPersonId)
-                    eventRepository.addEvent(created)
-                    return@forEach
-                }
-                val lastSyncedAt = local.lastSyncedAt ?: 0L
-                val localChanged = lastSyncedAt <= 0L
-                val remoteBaseline = local.externalUpdatedAt ?: 0L
-                val remoteChanged = remote.updatedAt > remoteBaseline
-                if (localChanged && remoteChanged) {
-                    conflicts.add(
-                        SyncConflict(
-                            calendarId = calendar.id,
-                            localEvent = local,
-                            remoteEvent = remote,
+                val localForCalendar = events.filter { event -> event.calendarId == source.calendarId }
+                val dedupedLocalForCalendar = cleanupDuplicateGoogleEvents(localForCalendar)
+                val localByExternalId = dedupedLocalForCalendar.filter { !it.externalId.isNullOrBlank() }
+                    .associateBy { it.externalId!! }
+                val localPending = dedupedLocalForCalendar
+                    .filter { it.externalId.isNullOrBlank() }
+
+                localPending.forEach { pending ->
+                    val remote =
+                        syncManager.createEvent(
+                            accountId = source.providerAccountId,
+                            calendarId = source.providerCalendarId,
+                            event = pending.toExternalEventPlaceholder(),
                         )
-                    )
-                } else if (remoteChanged) {
-                    val updated = remote.mergeInto(local, calendar, now)
-                    eventRepository.updateEvent(updated)
-                } else if (localChanged) {
-                    syncManager.updateEvent(
-                        accountId = source.providerAccountId,
-                        calendarId = source.providerCalendarId,
-                        eventId = remote.id,
-                        event = local.toExternalEvent(remote),
-                    )?.let { response ->
-                        val updated = local.copy(
-                            externalUpdatedAt = response.updatedAt,
+                    if (remote != null) {
+                        val updated = pending.copy(
+                            externalId = remote.id,
+                            externalUpdatedAt = remote.updatedAt,
                             lastSyncedAt = now,
                         )
                         eventRepository.updateEvent(updated)
                     }
-                } else if (local.lastSyncedAt != now) {
-                    val updated = local.copy(lastSyncedAt = now)
-                    eventRepository.updateEvent(updated)
                 }
+
+                remoteEvents.forEach { remote ->
+                    val local = localByExternalId[remote.id]
+                    if (remote.cancelled) {
+                        if (local != null) {
+                            eventRepository.deleteEvent(local)
+                        }
+                        return@forEach
+                    }
+                    if (local == null) {
+                        val created = remote.toLocalEvent(calendar, now, defaultPersonId)
+                        eventRepository.addEvent(created)
+                        return@forEach
+                    }
+                    val lastSyncedAt = local.lastSyncedAt ?: 0L
+                    val localChanged = lastSyncedAt <= 0L
+                    val remoteBaseline = local.externalUpdatedAt ?: 0L
+                    val remoteChanged = remote.updatedAt > remoteBaseline
+                    if (localChanged && remoteChanged) {
+                        conflicts.add(
+                            SyncConflict(
+                                calendarId = calendar.id,
+                                localEvent = local,
+                                remoteEvent = remote,
+                            ),
+                        )
+                    } else if (remoteChanged) {
+                        val updated = remote.mergeInto(local, calendar, now)
+                        eventRepository.updateEvent(updated)
+                    } else if (localChanged) {
+                        syncManager.updateEvent(
+                            accountId = source.providerAccountId,
+                            calendarId = source.providerCalendarId,
+                            eventId = remote.id,
+                            event = local.toExternalEvent(remote),
+                        )?.let { response ->
+                            val updated = local.copy(
+                                externalUpdatedAt = response.updatedAt,
+                                lastSyncedAt = now,
+                            )
+                            eventRepository.updateEvent(updated)
+                        }
+                    } else if (local.lastSyncedAt != now) {
+                        val updated = local.copy(lastSyncedAt = now)
+                        eventRepository.updateEvent(updated)
+                    }
+                }
+
+                localByExternalId.values
+                    .filter { it.externalId != null && it.externalId !in remoteIds }
+                    .forEach { eventRepository.deleteEvent(it) }
             }
 
-            localByExternalId.values
-                .filter { it.externalId != null && it.externalId !in remoteIds }
-                .forEach { eventRepository.deleteEvent(it) }
+            if (manual) {
+                conflictStateHolder.setConflicts(conflicts)
+            }
+            conflicts
         }
 
-        if (manual) {
-            conflictStateHolder.setConflicts(conflicts)
+    private suspend fun cleanupDuplicateGoogleEvents(localEvents: List<Event>): List<Event> {
+        val resolutions = GoogleEventDeduplication.resolveDuplicates(localEvents)
+        if (resolutions.isEmpty()) return localEvents
+
+        var cleaned = localEvents
+        resolutions.forEach { resolution ->
+            val mergedWinner = resolution.mergedWinner
+            if (mergedWinner != resolution.winner) {
+                eventRepository.updateEvent(mergedWinner)
+            }
+            resolution.losers.forEach { duplicate ->
+                // Local cleanup only. Remote records are left intact.
+                eventRepository.deleteEvent(duplicate)
+            }
+            val loserIds = resolution.losers.map { it.id }.toSet()
+            cleaned = cleaned.mapNotNull { event ->
+                when {
+                    event.id == resolution.winner.id -> mergedWinner
+                    event.id in loserIds -> null
+                    else -> event
+                }
+            }
         }
-        return conflicts
+        return cleaned
     }
 
     private fun buildSyncRange(): Pair<Long, Long> {
@@ -229,4 +261,8 @@ class SyncGoogleCalendarsUseCase(
             isAllDay = isAllDay,
             updatedAt = 0L,
         )
+
+    companion object {
+        private val syncMutex = Mutex()
+    }
 }

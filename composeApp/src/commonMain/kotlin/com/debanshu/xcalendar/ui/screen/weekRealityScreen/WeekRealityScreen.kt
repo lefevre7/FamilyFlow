@@ -49,6 +49,7 @@ import com.debanshu.xcalendar.domain.model.TaskStatus
 import com.debanshu.xcalendar.domain.model.effectivePersonId
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
+import com.debanshu.xcalendar.domain.util.GoogleEventDeduplication
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.ui.components.FamilyLensMiniHeader
 import com.debanshu.xcalendar.ui.components.SwipeablePager
@@ -59,6 +60,7 @@ import com.debanshu.xcalendar.ui.state.SyncConflictStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.utils.DateTimeFormatter
 import kotlinx.collections.immutable.ImmutableList
+import kotlinx.collections.immutable.toImmutableList
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
@@ -110,6 +112,7 @@ fun WeekRealityScreen(
     var onlyMust by rememberSaveable { mutableStateOf(false) }
 
     val currentWeekStart = remember(dateState.selectedDate) { startOfWeek(dateState.selectedDate) }
+    val displayEvents = remember(events) { GoogleEventDeduplication.dedupeForDisplay(events) }
 
     SwipeablePager(
         modifier = modifier.fillMaxSize(),
@@ -129,7 +132,7 @@ fun WeekRealityScreen(
         WeekPage(
             weekStart = weekStart,
             currentDate = dateState.currentDate,
-            events = events,
+            events = displayEvents.toImmutableList(),
             holidays = holidays,
             tasks = tasks,
             people = people,

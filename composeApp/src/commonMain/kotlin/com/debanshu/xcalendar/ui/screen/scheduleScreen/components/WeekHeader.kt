@@ -25,7 +25,7 @@ fun WeekHeader(startDate: LocalDate, endDate: LocalDate) {
                 .uppercase(),
             style = XCalendarTheme.typography.labelSmall,
             fontWeight = FontWeight.Medium,
-            color = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            color = XCalendarTheme.colorScheme.onSurfaceVariant
         )
     }
 }

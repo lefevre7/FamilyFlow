@@ -67,7 +67,7 @@ fun DayWithEvents(
             Text(
                 text = dayOfWeekText,
                 style = XCalendarTheme.typography.labelSmall,
-                color = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = XCalendarTheme.colorScheme.onSurfaceVariant,
             )
 
             Text(

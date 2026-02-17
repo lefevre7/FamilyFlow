@@ -66,9 +66,9 @@ actual fun rememberGoogleAuthController(
             }
             val idToken = tokenResponse.idToken
             val payload = idToken?.let { parseIdToken(it, json) }
-            val accountId = payload?.subject ?: tokenResponse.accessToken?.hashCode()?.toString()
+            val accountId = resolveStableAccountId(payload?.subject, payload?.issuer)
             if (accountId.isNullOrBlank()) {
-                onError("Unable to identify Google account.")
+                onError(ACCOUNT_IDENTITY_ERROR_MESSAGE)
                 return@performTokenRequest
             }
             val email = payload?.email ?: "unknown"
@@ -169,14 +169,25 @@ private fun formatAuthorizationException(exception: AuthorizationException): Str
 private data class IdTokenPayload(
     @SerialName("sub")
     val subject: String,
+    @SerialName("iss")
+    val issuer: String? = null,
     val email: String? = null,
     val name: String? = null,
 )
 
 private const val AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth"
 private const val TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token"
+internal const val ACCOUNT_IDENTITY_ERROR_MESSAGE =
+    "Couldn't verify Google account identity. Please reconnect and grant OpenID scope."
 private const val SCOPES =
     "openid email profile https://www.googleapis.com/auth/calendar"
+private val TRUSTED_ISSUERS = setOf("https://accounts.google.com", "accounts.google.com")
+
+internal fun resolveStableAccountId(subject: String?, issuer: String?): String? {
+    val trimmedSubject = subject?.trim()?.takeIf { it.isNotBlank() } ?: return null
+    if (!issuer.isNullOrBlank() && issuer !in TRUSTED_ISSUERS) return null
+    return trimmedSubject
+}
 
 private fun buildGoogleRedirectUri(clientId: String): Uri? {
     if (!clientId.endsWith(".apps.googleusercontent.com")) return null

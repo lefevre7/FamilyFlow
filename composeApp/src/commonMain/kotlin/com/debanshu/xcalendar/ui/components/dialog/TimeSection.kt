@@ -52,7 +52,7 @@ internal fun CalendarTimeSection(
             painter = painterResource(Res.drawable.ic_clock),
             contentDescription = null,
             modifier = Modifier.size(20.dp),
-            tint = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            tint = XCalendarTheme.colorScheme.onSurfaceVariant,
         )
 
         Spacer(modifier = Modifier.width(16.dp))

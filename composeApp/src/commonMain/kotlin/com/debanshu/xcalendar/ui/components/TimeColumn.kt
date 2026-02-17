@@ -67,7 +67,7 @@ private fun TimeCell(
         Text(
             text = formatHour(hour),
             style = XCalendarTheme.typography.labelSmall,
-            color = XCalendarTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            color = XCalendarTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.End,
             modifier =
                 Modifier
