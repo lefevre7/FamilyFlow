@@ -87,7 +87,7 @@ class OcrImportSheetCaptureStatusTest {
             harness.result("PTA meeting at $timestamp pm")
         }
         composeRule.waitForIdle()
-        composeRule.onAllNodesWithText("OCR text").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Image text").assertCountEquals(1)
         composeRule.onAllNodesWithText("Processing image...").assertCountEquals(0)
     }
 
@@ -133,7 +133,7 @@ class OcrImportSheetCaptureStatusTest {
         composeRule.runOnIdle { harness.result("School day starts 8:00 AM") }
         composeRule.waitForIdle()
         composeRule.runOnIdle { assertEquals(0, structureCalls) }
-        composeRule.onAllNodesWithText("OCR text").assertCountEquals(1)
+        composeRule.onAllNodesWithText("Image text").assertCountEquals(1)
         composeRule.onAllNodesWithText("Edit text").assertCountEquals(1)
         composeRule.onAllNodesWithText("Structure with AI").assertCountEquals(1)
         composeRule.runOnIdle { assertEquals(0, structureCalls) }

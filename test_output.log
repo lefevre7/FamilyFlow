@@ -1,0 +1,141 @@
+Reusing configuration cache.
+> Task :composeApp:preBuild UP-TO-DATE
+> Task :composeApp:preDebugBuild UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:debugAssetsCopyForAGP NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidMain NO-SOURCE
+> Task :composeApp:convertXmlValueResourcesForAndroidDebug NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidDebug NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidMain NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidDebug NO-SOURCE
+> Task :composeApp:generateResourceAccessorsForAndroidMain NO-SOURCE
+> Task :composeApp:generateComposeResClass UP-TO-DATE
+> Task :composeApp:javaPreCompileDebug UP-TO-DATE
+> Task :composeApp:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :composeApp:copyRoomSchemasToAndroidTestAssetsDebugAndroidTest UP-TO-DATE
+> Task :composeApp:generateBuildKonfig UP-TO-DATE
+> Task :composeApp:generateExpectResourceCollectorsForCommonMain UP-TO-DATE
+> Task :composeApp:generateDebugResValues UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:preDebugAndroidTestBuild SKIPPED
+> Task :composeApp:convertXmlValueResourcesForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:kmpPartiallyResolvedDependenciesChecker
+> Task :composeApp:processDebugAndroidTestNavigationResources UP-TO-DATE
+> Task :composeApp:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :composeApp:extractDeepLinksDebug UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:generateDebugAndroidTestResValues UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForAndroidInstrumentedTestDebug NO-SOURCE
+> Task :composeApp:generateDebugResources UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForAndroidInstrumentedTest NO-SOURCE
+> Task :composeApp:compileDebugAndroidTestNavigationResources UP-TO-DATE
+> Task :composeApp:javaPreCompileDebugAndroidTest UP-TO-DATE
+> Task :composeApp:generateDebugAndroidTestResources UP-TO-DATE
+> Task :composeApp:mergeDebugShaders UP-TO-DATE
+> Task :composeApp:copyNonXmlValueResourcesForCommonMain UP-TO-DATE
+> Task :composeApp:desugarDebugFileDependencies UP-TO-DATE
+> Task :composeApp:compileDebugShaders NO-SOURCE
+> Task :composeApp:generateDebugAssets UP-TO-DATE
+> Task :composeApp:mergeDebugJniLibFolders UP-TO-DATE
+> Task :composeApp:convertXmlValueResourcesForCommonMain NO-SOURCE
+> Task :composeApp:validateSigningDebug UP-TO-DATE
+> Task :composeApp:writeDebugAppMetadata UP-TO-DATE
+> Task :composeApp:prepareComposeResourcesTaskForCommonMain UP-TO-DATE
+> Task :composeApp:generateResourceAccessorsForCommonMain UP-TO-DATE
+> Task :composeApp:generateActualResourceCollectorsForAndroidMain UP-TO-DATE
+> Task :composeApp:copyDebugComposeResourcesToAndroidAssets UP-TO-DATE
+> Task :composeApp:writeDebugSigningConfigVersions UP-TO-DATE
+> Task :composeApp:packageDebugResources UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestShaders UP-TO-DATE
+> Task :composeApp:compileDebugAndroidTestShaders NO-SOURCE
+> Task :composeApp:copyDebugAndroidTestComposeResourcesToAndroidAssets UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestResources UP-TO-DATE
+> Task :composeApp:mapDebugAndroidTestSourceSetPaths UP-TO-DATE
+> Task :composeApp:generateDebugAndroidTestAssets UP-TO-DATE
+> Task :composeApp:desugarDebugAndroidTestFileDependencies UP-TO-DATE
+> Task :composeApp:mergeDebugResources UP-TO-DATE
+> Task :composeApp:mapDebugSourceSetPaths UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestJniLibFolders UP-TO-DATE
+> Task :composeApp:writeDebugAndroidTestSigningConfigVersions UP-TO-DATE
+> Task :composeApp:validateSigningDebugAndroidTest UP-TO-DATE
+> Task :composeApp:checkDebugAndroidTestAarMetadata UP-TO-DATE
+> Task :composeApp:checkDebugAarMetadata UP-TO-DATE
+> Task :composeApp:transformCommonMainDependenciesMetadata UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestAssets UP-TO-DATE
+> Task :composeApp:compressDebugAndroidTestAssets UP-TO-DATE
+> Task :composeApp:mergeDebugAssets UP-TO-DATE
+> Task :composeApp:compressDebugAssets UP-TO-DATE
+> Task :composeApp:processDebugNavigationResources UP-TO-DATE
+> Task :composeApp:compileDebugNavigationResources UP-TO-DATE
+> Task :composeApp:parseDebugLocalResources UP-TO-DATE
+> Task :composeApp:processDebugAndroidTestManifest UP-TO-DATE
+> Task :composeApp:processDebugMainManifest UP-TO-DATE
+> Task :composeApp:processDebugManifest UP-TO-DATE
+> Task :composeApp:kspCommonMainKotlinMetadata UP-TO-DATE
+> Task :composeApp:checkDebugAndroidTestDuplicateClasses UP-TO-DATE
+> Task :composeApp:processDebugManifestForPackage UP-TO-DATE
+> Task :composeApp:checkDebugDuplicateClasses UP-TO-DATE
+> Task :composeApp:mergeLibDexDebugAndroidTest UP-TO-DATE
+> Task :composeApp:mergeLibDexDebug UP-TO-DATE
+> Task :composeApp:mergeDebugNativeLibs UP-TO-DATE
+> Task :composeApp:stripDebugDebugSymbols UP-TO-DATE
+> Task :composeApp:mergeExtDexDebugAndroidTest UP-TO-DATE
+> Task :composeApp:mergeDebugAndroidTestNativeLibs NO-SOURCE
+> Task :composeApp:mergeExtDexDebug UP-TO-DATE
+> Task :composeApp:stripDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :composeApp:processDebugAndroidTestResources UP-TO-DATE
+> Task :composeApp:processDebugResources UP-TO-DATE
+> Task :composeApp:kspDebugKotlinAndroid UP-TO-DATE
+> Task :composeApp:compileDebugKotlinAndroid UP-TO-DATE
+> Task :composeApp:compileDebugJavaWithJavac NO-SOURCE
+> Task :composeApp:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :composeApp:kspDebugAndroidTestKotlinAndroid SKIPPED
+> Task :composeApp:dexBuilderDebug UP-TO-DATE
+> Task :composeApp:processDebugJavaRes UP-TO-DATE
+> Task :composeApp:mergeProjectDexDebug UP-TO-DATE
+> Task :composeApp:mergeDebugJavaResource UP-TO-DATE
+> Task :composeApp:mergeDebugGlobalSynthetics UP-TO-DATE
+> Task :composeApp:packageDebug UP-TO-DATE
+> Task :composeApp:createDebugApkListingFileRedirect UP-TO-DATE
+
+> Task :composeApp:compileDebugAndroidTestKotlinAndroid FAILED
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:123:47 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:126:49 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:129:47 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:150:52 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:183:52 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:223:57 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:235:61 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:264:11 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:334:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:335:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:342:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:356:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:399:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:400:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:401:50 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:408:53 Unresolved reference 'performScrollToSafely'.
+e: file:///Users/lefevre7/AndroidStudioProjects/XCalendar/composeApp/src/androidInstrumentedTest/kotlin/com/debanshu/xcalendar/flows/TodayFlowTest.kt:409:53 Unresolved reference 'performScrollToSafely'.
+
+> Task :composeApp:copyRoomSchemas NO-SOURCE
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':composeApp:compileDebugAndroidTestKotlinAndroid'.
+> A failure occurred while executing org.jetbrains.kotlin.compilerRunner.GradleCompilerRunnerWithWorkers$GradleKotlinCompilerWorkAction
+   > Compilation error. See log for more details
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 1s
+73 actionable tasks: 2 executed, 71 up-to-date
+Configuration cache entry reused.

@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.common.convertStringToColor
@@ -298,7 +299,7 @@ private fun TitleTextField(
     interactionSource: MutableInteractionSource,
 ) {
     TextField(
-        modifier = Modifier.fillMaxWidth().padding(start = 40.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 40.dp).testTag("event_title_input"),
         value = value,
         onValueChange = onValueChange,
         textStyle = MaterialTheme.typography.headlineSmall,

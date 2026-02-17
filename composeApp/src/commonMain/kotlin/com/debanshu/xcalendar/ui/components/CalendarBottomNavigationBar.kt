@@ -57,6 +57,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -667,6 +668,7 @@ internal fun CalendarBottomNavigationBar(
                         modifier =
                             Modifier
                                 .size(56.dp)
+                                .testTag("fab_quick_add")
                                 .combinedClickable(
                                     onClick = {
                                         showAddShortcuts = false

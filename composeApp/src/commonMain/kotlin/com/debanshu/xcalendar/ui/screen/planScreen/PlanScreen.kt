@@ -32,6 +32,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -480,7 +481,7 @@ internal fun BrainDumpSection(
         OutlinedTextField(
             value = captureText,
             onValueChange = onCaptureTextChanged,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().testTag("brain_dump_input"),
             label = { Text("Quick capture") },
             placeholder = { Text("Type or say it - e.g., Pick up preschool forms tomorrow") },
             maxLines = 4,
@@ -1073,7 +1074,10 @@ private fun ScanScheduleSection(
                     style = XCalendarTheme.typography.bodyMedium,
                     color = XCalendarTheme.colorScheme.onSurfaceVariant,
                 )
-                TextButton(onClick = onScan) {
+                TextButton(
+                    onClick = onScan,
+                    modifier = Modifier.testTag("scan_schedule_button"),
+                ) {
                     Text("Scan schedule")
                 }
             }
@@ -1149,7 +1153,7 @@ private fun InboxSource.label(): String =
     when (this) {
         InboxSource.TEXT -> "Text"
         InboxSource.VOICE -> "Voice"
-        InboxSource.OCR -> "OCR"
+        InboxSource.OCR -> "Image to Text"
     }
 
 private fun InboxStatus.label(): String =

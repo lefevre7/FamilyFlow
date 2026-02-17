@@ -35,6 +35,10 @@ robolectric = "4.11.1"
 androidx-compose-ui-test = "1.7.6"
 androidx-test-core = "1.6.1"
 ucrop = "2.2.11"
+espresso-core = "3.6.1"
+ui-automator = "2.3.0"
+leakcanary = "2.14"
+koin-test = "4.1.1"
 
 [libraries]
 androidx-adaptive-layout = { module = "org.jetbrains.compose.material3.adaptive:adaptive-layout", version.ref = "adaptive" }
@@ -89,6 +93,11 @@ robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectr
 compose-ui-test-junit4 = { module = "org.jetbrains.compose.ui:ui-test-junit4", version.ref = "compose-multiplatform" }
 androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4-android", version.ref = "androidx-compose-ui-test" }
 ucrop = { module = "com.github.yalantis:ucrop", version.ref = "ucrop" }
+espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "espresso-core" }
+ui-automator = { module = "androidx.test.uiautomator:uiautomator", version.ref = "ui-automator" }
+leakcanary-android-instrumentation = { module = "com.squareup.leakcanary:leakcanary-android-instrumentation", version.ref = "leakcanary" }
+koin-test = { module = "io.insert-koin:koin-test", version.ref = "koin-test" }
+koin-test-junit4 = { module = "io.insert-koin:koin-test-junit4", version.ref = "koin-test" }
 
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }

@@ -73,6 +73,97 @@ Note: this project currently uses a single `ClientId` value from `local.properti
 2. Unit tests: `./gradlew :composeApp:test`
 3. Android unit tests: `./gradlew :composeApp:testDebugUnitTest`
 
+**Instrumented Tests**
+
+Instrumented tests run on an Android emulator or physical device and provide comprehensive end-to-end validation of UI flows and integrations.
+
+*Run Command*
+```bash
+./gradlew :composeApp:connectedDebugAndroidTest
+```
+
+*Prerequisites*
+- Start an emulator or connect a physical device with USB debugging enabled
+- Device API level should be 26 (Android 8.0) or higher
+- Ensure sufficient storage on device for test APK installation
+
+*Test Structure*
+- **flows/** - End-to-end user journey tests (Today Survival, Week Reality Check, Plan Brain Dump, Quick Add, Google Sync)
+- **features/** - Feature-specific interaction tests (People management, OCR import, Accessibility validation)
+- **performance/** - Performance benchmarks and smoke tests (load times, memory usage, ANR detection)
+- **util/** - Reusable test utilities (TestRules, TestActions, TestAssertions, TestDataFactory)
+- **di/** - Test dependency injection (TestInstrumentedModule with fake repositories and mocked services)
+
+*Coverage Summary (78 test scenarios)*
+- TodayFlowTest: 8 scenarios (grouping, actions, lens filters, Today Only, sticky routines, accessibility)
+- QuickAddFlowTest: 6 scenarios (FAB modes, Task/Event/Voice, priority/energy, verification)
+- GoogleSyncFlowTest: 7 scenarios (OAuth, calendar sync, conflict resolution, memory leak detection)
+- PlanFlowTest: 6 scenarios (inline capture, inbox processing, status transitions, validation)
+- OcrImportFeatureTest: 10 scenarios (scan schedule, recurring patterns, person assignment, category mapping)
+- WeekFlowTest: 8 scenarios (filters, lens switching, day expansion, persistence, accessibility)
+- PeopleFeatureTest: 11 scenarios (edit person, lens updates, role labels, cross-screen sync)
+- AccessibilityFeatureTest: 11 scenarios (content descriptions, interactive elements, screen reader compatibility)
+- PerformanceTest: 14 scenarios (load times, smoke tests, ANR detection, memory leak detection, baseline logging)
+
+*Performance Baselines*
+- Screen load time target: < 500ms
+- Screen load time max: < 2000ms
+- Baseline measurements are logged during test execution for all main screens (Today/Week/Plan/People/Settings)
+
+*Adding New Tests*
+1. Extend **TestRules.kt** for custom Compose test rules with Koin test module setup
+2. Add reusable actions to **TestActions.kt** (e.g., `navigateToScreen`, `addTask`, `login`)
+3. Add domain-specific assertions to **TestAssertions.kt** (e.g., verify Today grouping, lens filters)
+4. Use **TestDataFactory** for test data builders (events, tasks, people with consistent IDs)
+5. Follow existing patterns: Flow-based repository APIs with `.first()` for synchronous assertions
+6. Use `composeTestRule.waitForIdle()` after navigation and interactions to ensure UI stability
+
+*Troubleshooting Common Issues*
+
+**Emulator Setup**
+- Ensure emulator is fully booted before running tests (check `adb devices` shows device as online)
+- Use a stable emulator image (Pixel 5, API 34, x86_64 recommended for fast execution)
+- Increase emulator RAM to 4GB+ if experiencing crashes during test execution
+
+**Koin Test Module Conflicts**
+- If seeing "KoinAppAlreadyStartedException", ensure `@get:Rule` is used for `createAndroidComposeRule`
+- Test modules override production modules; check `TestInstrumentedModule` for correct fake registrations
+- Use `get<IRepository>()` injection (interface type) instead of concrete `FakeRepository` for flexibility
+
+**Compose Test Synchronization**
+- Always call `composeTestRule.waitForIdle()` after navigation or state-changing actions
+- Use `runBlocking { delay(100) }` for brief waits when `waitForIdle()` is insufficient (e.g., animation completion)
+- For async repository operations, use `.first()` to convert Flow to synchronous value: `repository.getItems().first()`
+- Manual polling pattern for state verification:
+  ```kotlin
+  runBlocking {
+      withTimeout(5000) {
+          while (condition not met) {
+              val currentState = repository.getState().first()
+              // check condition
+              delay(100)
+          }
+      }
+  }
+  ```
+
+**Permission Setup**
+- Voice capture tests use `@get:Rule val permissionRule = GrantPermissionRule.grant(Manifest.permission.RECORD_AUDIO)`
+- Ensure permissions are granted before executing permission-dependent flows
+- If tests fail with permission errors, check emulator permission settings (Settings → Apps → ADHD MOM → Permissions)
+
+**Flakiness Reduction**
+- Use `hasContentDescription()` matchers instead of exact text matching when content is dynamic
+- Prefer `substring = true` in `onNodeWithText()` for partial text matching to handle dynamic content
+- Increase timeout values if tests fail intermittently on slower devices: `withTimeout(10000)` instead of `withTimeout(5000)`
+- Use `performScrollTo()` before assertions if elements may be off-screen
+
+*CI/CD Notes*
+- Instrumented tests are currently **developer-run locally** (manual execution before commits)
+- Not integrated into CI pipeline due to emulator setup complexity and execution time
+- Run full test suite before merging: `./gradlew :composeApp:test :composeApp:testDebugUnitTest :composeApp:connectedDebugAndroidTest`
+- Keep Robolectric tests in `androidUnitTest/` for fast feedback; instrumented tests complement with integration coverage
+
 **Clear Cache**
 `adb shell am start -n com.debanshu.xcalendar/.MainActivity`
 

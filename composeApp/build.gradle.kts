@@ -160,6 +160,18 @@ dependencies {
         add(it, libs.room.compiler)
         add(it, libs.koin.ksp.compiler)
     }
+    
+    // Instrumented test dependencies  
+    "androidTestImplementation"(libs.androidx.compose.ui.test.junit4)
+    "androidTestImplementation"(libs.espresso.core)
+    "androidTestImplementation"(libs.ui.automator)
+    // LeakCanary disabled due to Kotlin stdlib packaging issues in test APK
+    // "androidTestImplementation"(libs.leakcanary.android.instrumentation)
+    "androidTestImplementation"(libs.androidx.test.core)
+    "androidTestImplementation"(libs.work.testing)
+    "androidTestImplementation"(libs.koin.test)
+    "androidTestImplementation"(libs.koin.test.junit4)
+    "androidTestImplementation"(libs.kotlinx.coroutines.test)
 }
 
 ksp {
@@ -207,6 +219,7 @@ android {
                 .toInt()
         versionCode = 1
         versionName = "1.0"
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     packaging {
         resources {

@@ -138,7 +138,7 @@ fun OcrImportSheet(
     fun structureRawText() {
         val textToStructure = rawText.trim()
         if (textToStructure.isBlank()) {
-            statusMessage = "Capture or enter OCR text first."
+            statusMessage = "Capture or enter image text first."
             return
         }
 
@@ -158,11 +158,11 @@ fun OcrImportSheet(
                     },
                 )
                 if (editableCandidates.isEmpty()) {
-                    statusMessage = "No events found. Edit OCR text and try structuring again."
+                    statusMessage = "No events found. Edit image text and try structuring again."
                 }
             } catch (_: Throwable) {
                 editableCandidates.clear()
-                statusMessage = "Could not structure OCR text. Try again."
+                statusMessage = "Could not structure image text. Try again."
             } finally {
                 isStructuring = false
             }
@@ -197,7 +197,7 @@ fun OcrImportSheet(
 
             if (!PlatformFeatures.ocr.supported || !controller.isAvailable) {
                 Text(
-                    text = PlatformFeatures.ocr.reason ?: "OCR is not available on this device.",
+                    text = PlatformFeatures.ocr.reason ?: "Image to Text is not available on this device.",
                     style = XCalendarTheme.typography.bodySmall,
                     color = XCalendarTheme.colorScheme.onSurfaceVariant,
                 )
@@ -227,7 +227,7 @@ fun OcrImportSheet(
             }
 
             if (isStructuring) {
-                StatusCard("Structuring OCR with local AI JSON extraction...")
+                StatusCard("Structuring image text with local AI JSON extraction...")
             }
 
             statusMessage?.let { StatusCard(it) }
@@ -363,12 +363,12 @@ private fun RawTextCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Text(
-                text = "OCR text",
+                text = "Image text",
                 style = XCalendarTheme.typography.titleSmall,
                 color = XCalendarTheme.colorScheme.onSurface,
             )
             Text(
-                text = "Review OCR text, edit if needed, then structure with AI.",
+                text = "Review image text, edit if needed, then structure with AI.",
                 style = XCalendarTheme.typography.bodySmall,
                 color = XCalendarTheme.colorScheme.onSurfaceVariant,
             )
@@ -376,7 +376,7 @@ private fun RawTextCard(
                 OutlinedTextField(
                     value = text,
                     onValueChange = onTextChange,
-                    label = { Text("Edit OCR text") },
+                    label = { Text("Edit image text") },
                     modifier = Modifier.fillMaxWidth().testTag("ocrRawTextInput"),
                     enabled = !isStructuring,
                     minLines = 4,
@@ -746,7 +746,7 @@ private fun EditableCandidate.toEvent(
         calendarId = calendar.id,
         calendarName = calendar.name,
         title = titleValue,
-        description = ImportCategoryClassifier.applyCategory("OCR import: ${sourceText.take(120)}", category),
+        description = ImportCategoryClassifier.applyCategory("Image to Text import: ${sourceText.take(120)}", category),
         location = null,
         startTime = startMillis,
         endTime = endMillis,

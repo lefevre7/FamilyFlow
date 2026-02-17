@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.model.FamilyLens
 import com.debanshu.xcalendar.domain.model.FamilyLensSelection
@@ -36,7 +37,7 @@ fun FamilyLensMiniHeader(
     val selectedPerson = people.firstOrNull { it.id == selection.personId } ?: mom ?: people.firstOrNull()
 
     Column(
-        modifier = modifier,
+        modifier = modifier.testTag("lens_selector"),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
