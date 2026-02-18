@@ -5,7 +5,10 @@ import androidx.compose.foundation.layout.calculateEndPadding
 import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -33,6 +36,7 @@ import com.debanshu.xcalendar.ui.components.GlobalSelectionVisual
 import com.debanshu.xcalendar.ui.components.dialog.QuickAddMode
 import com.debanshu.xcalendar.ui.components.dialog.QuickAddSheet
 import com.debanshu.xcalendar.ui.components.dialog.AddEventDialog
+import com.debanshu.xcalendar.ui.components.dialog.EditEventDialog
 import com.debanshu.xcalendar.ui.components.dialog.EventDetailsDialog
 import com.debanshu.xcalendar.ui.components.dialog.HolidayDetailsDialog
 import com.debanshu.xcalendar.domain.repository.IDateSelectionPreferencesRepository
@@ -47,9 +51,12 @@ import com.debanshu.xcalendar.ui.state.LensStateHolder
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import com.debanshu.xcalendar.ui.viewmodel.EventViewModel
 import com.debanshu.xcalendar.platform.getSystemAccessibility
+import com.debanshu.xcalendar.platform.PlatformNotifier
 import com.debanshu.xcalendar.domain.model.User
+import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
+import com.debanshu.xcalendar.domain.util.RecurringEventEditResolver
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import kotlinx.collections.immutable.toImmutableList
@@ -73,6 +80,16 @@ private val config =
             }
     }
 
+private enum class RecurringEditScope {
+    THIS_EVENT,
+    ENTIRE_SERIES,
+}
+
+private data class EventEditRequest(
+    val event: Event,
+    val scope: RecurringEditScope,
+)
+
 @Composable
 fun CalendarApp(
     quickAddRequests: Flow<QuickAddMode?>? = null,
@@ -89,6 +106,7 @@ fun CalendarApp(
     val uiPreferencesRepository = koinInject<IUiPreferencesRepository>()
     val getReminderPreferencesUseCase = koinInject<GetReminderPreferencesUseCase>()
     val getCurrentUserUseCase = koinInject<GetCurrentUserUseCase>()
+    val notifier = koinInject<PlatformNotifier>()
     val reminderPreferences by remember { getReminderPreferencesUseCase() }.collectAsState(initial = ReminderPreferences())
     val fallbackEventUser =
         remember {
@@ -113,6 +131,7 @@ fun CalendarApp(
         onOnboardingCompleted = onOnboardingCompleted,
         reminderPreferences = reminderPreferences,
         fallbackEventUser = fallbackEventUser,
+        notifier = notifier,
     )
 }
 
@@ -131,6 +150,7 @@ private fun CalendarApp(
     onOnboardingCompleted: (() -> Unit)? = null,
     reminderPreferences: ReminderPreferences = ReminderPreferences(),
     fallbackEventUser: User,
+    notifier: PlatformNotifier,
 ) {
     val calendarUiState by calendarViewModel.uiState.collectAsState()
     val eventUiState by eventViewModel.uiState.collectAsState()
@@ -141,6 +161,8 @@ private fun CalendarApp(
     var showQuickAddSheet by remember { mutableStateOf(false) }
     var quickAddMode by remember { mutableStateOf(QuickAddMode.TASK) }
     var showEventSheet by remember { mutableStateOf(false) }
+    var eventEditRequest by remember { mutableStateOf<EventEditRequest?>(null) }
+    var pendingRecurringEditEvent by remember { mutableStateOf<Event?>(null) }
     var showOnboarding by rememberSaveable { mutableStateOf(showOnboardingInitially) }
     var dockPositionX by rememberSaveable { mutableStateOf(0.5f) }
     var dockPositionY by rememberSaveable { mutableStateOf(1f) }
@@ -317,11 +339,105 @@ private fun CalendarApp(
                 selectedEvent?.let { selected ->
                     EventDetailsDialog(
                         event = selected,
-                        onEdit = { editedEvent ->
-                            eventViewModel.editEvent(editedEvent)
+                        onEdit = { event ->
+                            if (RecurringEventEditResolver.requiresScopePrompt(event)) {
+                                pendingRecurringEditEvent = event
+                            } else {
+                                eventEditRequest =
+                                    EventEditRequest(
+                                        event = event,
+                                        scope = RecurringEditScope.THIS_EVENT,
+                                    )
+                                eventViewModel.clearSelectedEvent()
+                            }
                         },
                         onDismiss = {
                             eventViewModel.clearSelectedEvent()
+                        },
+                    )
+                }
+
+                pendingRecurringEditEvent?.let { event ->
+                    AlertDialog(
+                        onDismissRequest = { pendingRecurringEditEvent = null },
+                        title = { Text("Recurring event") },
+                        text = { Text("Apply changes to this event or the entire series?") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    eventEditRequest =
+                                        EventEditRequest(
+                                            event = event,
+                                            scope = RecurringEditScope.THIS_EVENT,
+                                        )
+                                    pendingRecurringEditEvent = null
+                                    eventViewModel.clearSelectedEvent()
+                                },
+                            ) {
+                                Text("This event")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = {
+                                    eventEditRequest =
+                                        EventEditRequest(
+                                            event = event,
+                                            scope = RecurringEditScope.ENTIRE_SERIES,
+                                        )
+                                    pendingRecurringEditEvent = null
+                                    eventViewModel.clearSelectedEvent()
+                                },
+                            ) {
+                                Text("Entire series")
+                            }
+                        },
+                    )
+                }
+
+                eventEditRequest?.let { request ->
+                    EditEventDialog(
+                        user = calendarUiState.accounts.firstOrNull() ?: fallbackEventUser,
+                        calendars = visibleCalendars.toImmutableList(),
+                        event = request.event,
+                        onSave = { updatedEvent ->
+                            when (request.scope) {
+                                RecurringEditScope.THIS_EVENT -> {
+                                    eventViewModel.editEvent(updatedEvent)
+                                    notifier.showToast("Event updated")
+                                }
+                                RecurringEditScope.ENTIRE_SERIES -> {
+                                    val seriesEvents = RecurringEventEditResolver.resolveSeriesEvents(events, request.event)
+                                    val updatedSeries =
+                                        seriesEvents.map { target ->
+                                            RecurringEventEditResolver.applySeriesUpdate(
+                                                target = target,
+                                                originalEditTarget = request.event,
+                                                updatedEditTarget = updatedEvent,
+                                            )
+                                        }
+                                    eventViewModel.editEvents(updatedSeries)
+                                    notifier.showToast("Series updated")
+                                }
+                            }
+                            eventEditRequest = null
+                        },
+                        onDelete = { toDelete ->
+                            when (request.scope) {
+                                RecurringEditScope.THIS_EVENT -> {
+                                    eventViewModel.deleteEvent(toDelete)
+                                    notifier.showToast("Event deleted")
+                                }
+                                RecurringEditScope.ENTIRE_SERIES -> {
+                                    val seriesEvents = RecurringEventEditResolver.resolveSeriesEvents(events, request.event)
+                                    eventViewModel.deleteEvents(seriesEvents)
+                                    notifier.showToast("Series deleted")
+                                }
+                            }
+                            eventEditRequest = null
+                        },
+                        onDismiss = {
+                            eventEditRequest = null
                         },
                     )
                 }

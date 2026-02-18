@@ -294,6 +294,24 @@ class EventViewModelTest {
     }
 
     @Test
+    fun `editEvents updates all events`() = runTest {
+        // Given
+        val fakeRepository = FakeEventRepository()
+        val viewModel = createViewModel(fakeRepository)
+        val first = createTestEvent(id = "event-1", title = "First")
+        val second = createTestEvent(id = "event-2", title = "Second")
+
+        // When
+        viewModel.editEvents(listOf(first, second))
+        advanceUntilIdle()
+
+        // Then
+        assertEquals(2, fakeRepository.updatedEvents.size)
+        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.selectedEvent)
+    }
+
+    @Test
     fun `deleteEvent success clears selectedEvent and error`() = runTest {
         // Given
         val fakeRepository = FakeEventRepository()
@@ -310,6 +328,24 @@ class EventViewModelTest {
         assertNull(viewModel.uiState.value.selectedEvent)
         assertNull(viewModel.uiState.value.errorMessage)
         assertEquals(1, fakeRepository.deletedEvents.size)
+    }
+
+    @Test
+    fun `deleteEvents removes all events`() = runTest {
+        // Given
+        val fakeRepository = FakeEventRepository()
+        val viewModel = createViewModel(fakeRepository)
+        val first = createTestEvent(id = "event-1", title = "First")
+        val second = createTestEvent(id = "event-2", title = "Second")
+
+        // When
+        viewModel.deleteEvents(listOf(first, second))
+        advanceUntilIdle()
+
+        // Then
+        assertEquals(2, fakeRepository.deletedEvents.size)
+        assertNull(viewModel.uiState.value.errorMessage)
+        assertNull(viewModel.uiState.value.selectedEvent)
     }
 
     @Test

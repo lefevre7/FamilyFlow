@@ -64,6 +64,29 @@ class EventViewModel(
         }
     }
 
+    fun editEvents(events: List<Event>) {
+        if (events.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            var firstError: String? = null
+            events.forEach { event ->
+                updateEventUseCase(event)
+                    .onError { error ->
+                        if (firstError == null) {
+                            firstError = error.message
+                        }
+                    }
+            }
+            _uiState.update {
+                it.copy(
+                    selectedEvent = null,
+                    isLoading = false,
+                    errorMessage = firstError,
+                )
+            }
+        }
+    }
+
     fun deleteEvent(event: Event) {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
@@ -75,6 +98,29 @@ class EventViewModel(
                 }.onError { error ->
                     _uiState.update { it.copy(isLoading = false, errorMessage = error.message) }
                 }
+        }
+    }
+
+    fun deleteEvents(events: List<Event>) {
+        if (events.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(isLoading = true) }
+            var firstError: String? = null
+            events.forEach { event ->
+                deleteEventUseCase(event)
+                    .onError { error ->
+                        if (firstError == null) {
+                            firstError = error.message
+                        }
+                    }
+            }
+            _uiState.update {
+                it.copy(
+                    selectedEvent = null,
+                    isLoading = false,
+                    errorMessage = firstError,
+                )
+            }
         }
     }
 

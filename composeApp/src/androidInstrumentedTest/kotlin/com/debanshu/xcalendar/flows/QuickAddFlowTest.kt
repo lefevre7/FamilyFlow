@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import com.debanshu.xcalendar.util.assertAnyNodeWithTextExists
 import com.debanshu.xcalendar.util.assertNodeWithTagExists
+import com.debanshu.xcalendar.util.clickFirstNodeWithTextIfExists
 import com.debanshu.xcalendar.util.clickQuickAddFab
 import com.debanshu.xcalendar.util.navigateToScreen
 import com.debanshu.xcalendar.util.performScrollToSafely
@@ -52,7 +53,7 @@ class QuickAddFlowTest {
         composeRule.clickQuickAddFab()
 
         // Select Event mode
-        composeRule.onNodeWithText("Event").performClick()
+        composeRule.clickFirstNodeWithTextIfExists("Event", substring = false, ignoreCase = false)
 
         // Verify event mode content appears
         composeRule.assertAnyNodeWithTextExists("Create a timed event", substring = true, ignoreCase = true)

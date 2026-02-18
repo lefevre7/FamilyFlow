@@ -63,7 +63,7 @@ Note: this project currently uses a single `ClientId` value from `local.properti
 2. Build the debug APK:
    - `./gradlew :composeApp:assembleDebug`
 3. Install the APK:
-   - `adb install -r composeApp/build/outputs/apk/debug/composeApp-debug.apk`
+   - `adb install -r composeApp/build/outputs/apk/debug/composeApp-debug.apk` or `./gradlew :composeApp:installDebug`
 4. Launch the app:
    - `adb shell am start -n com.debanshu.xcalendar/.MainActivity`
 5. On first launch, complete or skip onboarding, then land on Today view.
