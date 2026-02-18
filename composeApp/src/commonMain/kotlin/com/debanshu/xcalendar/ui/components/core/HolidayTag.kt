@@ -1,6 +1,7 @@
 package com.debanshu.xcalendar.ui.components.core
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +34,7 @@ fun HolidayTag(
     name: String,
     modifier: Modifier = Modifier,
     compact: Boolean = true,
+    onClick: (() -> Unit)? = null,
 ) {
     Text(
         text = name,
@@ -52,7 +54,8 @@ fun HolidayTag(
                 .background(
                     XCalendarColors.holiday,
                     RoundedCornerShape(if (compact) 4.dp else 8.dp),
-                ).padding(if (compact) 2.dp else 8.dp),
+                ).then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+                .padding(if (compact) 2.dp else 8.dp),
     )
 }
 
@@ -63,6 +66,7 @@ fun HolidayTag(
 fun ScheduleHolidayTag(
     name: String,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Text(
         text = name,
@@ -76,6 +80,7 @@ fun ScheduleHolidayTag(
                 .background(
                     XCalendarColors.scheduleHolidayContainer,
                     RoundedCornerShape(4.dp),
-                ).padding(horizontal = 12.dp, vertical = 8.dp),
+                ).then(if (onClick != null) Modifier.clickable { onClick() } else Modifier)
+                .padding(horizontal = 12.dp, vertical = 8.dp),
     )
 }

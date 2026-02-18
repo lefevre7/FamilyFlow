@@ -26,6 +26,7 @@ fun NavigationHost(
     events: ImmutableList<Event>,
     holidays: ImmutableList<Holiday>,
     onEventClick: (Event) -> Unit = {},
+    onHolidayClick: (Holiday) -> Unit = {},
 ) {
     // Track current screen for shared element visibility
     val currentScreen = backStack.lastOrNull()
@@ -60,6 +61,7 @@ fun NavigationHost(
                         holidays = holidays,
                         isVisible = currentScreen == NavigableScreen.Week,
                         onEventClick = onEventClick,
+                        onHolidayClick = onHolidayClick,
                         onNavigateToSettings = {
                             backStack.replaceLast(NavigableScreen.Settings)
                         },

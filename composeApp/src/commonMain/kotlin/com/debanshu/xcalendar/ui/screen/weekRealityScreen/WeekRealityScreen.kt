@@ -86,6 +86,7 @@ fun WeekRealityScreen(
     holidays: ImmutableList<Holiday>,
     isVisible: Boolean = true,
     onEventClick: (Event) -> Unit = {},
+    onHolidayClick: (Holiday) -> Unit = {},
     onNavigateToSettings: () -> Unit = {},
 ) {
     if (!isVisible) return
@@ -149,6 +150,7 @@ fun WeekRealityScreen(
                 dateStateHolder.updateSelectedDateState(selectedDay)
             },
             onEventClick = onEventClick,
+            onHolidayClick = onHolidayClick,
             pendingConflictCount = conflicts.size,
             onNavigateToSettings = onNavigateToSettings,
         )
@@ -175,6 +177,7 @@ private fun WeekPage(
     nowMillis: Long,
     onSelectDay: (LocalDate) -> Unit,
     onEventClick: (Event) -> Unit,
+    onHolidayClick: (Holiday) -> Unit,
     pendingConflictCount: Int,
     onNavigateToSettings: () -> Unit,
 ) {
@@ -264,6 +267,7 @@ private fun WeekPage(
                     holidays = holidaysByDay[date].orEmpty(),
                     peopleById = peopleById,
                     onEventClick = onEventClick,
+                    onHolidayClick = onHolidayClick,
                     onMoreClick = {
                         selectedDay = date
                         onSelectDay(date)
@@ -287,6 +291,10 @@ private fun WeekPage(
                 onEventClick = { event ->
                     selectedDay = null
                     onEventClick(event)
+                },
+                onHolidayClick = { holiday ->
+                    selectedDay = null
+                    onHolidayClick(holiday)
                 },
             )
         }
@@ -392,6 +400,7 @@ private fun DayColumn(
     holidays: List<Holiday>,
     peopleById: Map<String, Person>,
     onEventClick: (Event) -> Unit,
+    onHolidayClick: (Holiday) -> Unit,
     onMoreClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -422,7 +431,7 @@ private fun DayColumn(
             EmptyDayCard()
         } else {
             holidays.take(2).forEach { holiday ->
-                ScheduleHolidayTag(name = holiday.name)
+                ScheduleHolidayTag(name = holiday.name, onClick = { onHolidayClick(holiday) })
             }
             if (holidays.size > 2) {
                 Text(
@@ -542,6 +551,7 @@ private fun DayDetailSheet(
     holidays: List<Holiday>,
     peopleById: Map<String, Person>,
     onEventClick: (Event) -> Unit,
+    onHolidayClick: (Holiday) -> Unit,
 ) {
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
@@ -554,7 +564,7 @@ private fun DayDetailSheet(
         )
         if (holidays.isNotEmpty()) {
             holidays.forEach { holiday ->
-                ScheduleHolidayTag(name = holiday.name)
+                ScheduleHolidayTag(name = holiday.name, onClick = { onHolidayClick(holiday) })
             }
         }
         if (items.isEmpty() && holidays.isEmpty()) {

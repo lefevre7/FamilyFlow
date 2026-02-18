@@ -10,6 +10,7 @@ import com.debanshu.xcalendar.domain.repository.IPersonRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
 import com.debanshu.xcalendar.domain.repository.ITaskRepository
+import com.debanshu.xcalendar.domain.repository.IUiPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IVoiceDiagnosticsRepository
 import com.debanshu.xcalendar.domain.usecase.inbox.CreateInboxItemUseCase
 import com.debanshu.xcalendar.domain.usecase.inbox.ProcessVoiceNoteUseCase
@@ -59,6 +60,7 @@ fun buildTestDependencies(
             single<IInboxRepository> { inboxRepository }
             single<IReminderPreferencesRepository> { FakeReminderPreferencesRepository() }
             single<ILensPreferencesRepository> { FakeLensPreferencesRepository() }
+            single<IUiPreferencesRepository> { FakeUiPreferencesRepository() }
             single<IVoiceDiagnosticsRepository> { voiceDiagnosticsRepository }
             single<ReminderScheduler> { reminderScheduler }
             single<WidgetUpdater> { widgetUpdater }

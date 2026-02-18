@@ -16,6 +16,7 @@ import com.debanshu.xcalendar.domain.repository.IPersonRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IRoutineRepository
 import com.debanshu.xcalendar.domain.repository.ITaskRepository
+import com.debanshu.xcalendar.domain.repository.IUiPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IVoiceDiagnosticsRepository
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
 import com.debanshu.xcalendar.domain.llm.LocalLlmManager
@@ -135,6 +136,16 @@ class FakeLensPreferencesRepository : ILensPreferencesRepository {
 
     override suspend fun updateSelection(selection: FamilyLensSelection) {
         state.value = selection
+    }
+}
+
+class FakeUiPreferencesRepository(initialDismissed: Boolean = false) : IUiPreferencesRepository {
+    private val _navDragHintDismissed = MutableStateFlow(initialDismissed)
+
+    override val navDragHintDismissed: Flow<Boolean> = _navDragHintDismissed
+
+    override suspend fun setNavDragHintDismissed(dismissed: Boolean) {
+        _navDragHintDismissed.value = dismissed
     }
 }
 
