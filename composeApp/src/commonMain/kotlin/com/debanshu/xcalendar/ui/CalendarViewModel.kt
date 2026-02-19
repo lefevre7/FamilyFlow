@@ -15,6 +15,9 @@ import com.debanshu.xcalendar.domain.usecase.holiday.GetHolidaysForYearUseCase
 import com.debanshu.xcalendar.domain.usecase.holiday.RefreshHolidaysUseCase
 import com.debanshu.xcalendar.domain.usecase.person.EnsureDefaultPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.GetHolidayPreferencesUseCase
+import com.debanshu.xcalendar.domain.model.GoogleAccountLink
+import com.debanshu.xcalendar.domain.model.User
+import com.debanshu.xcalendar.domain.usecase.google.GetAllGoogleAccountsUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.domain.util.DomainError
 import com.debanshu.xcalendar.ui.state.DateStateHolder
@@ -54,6 +57,7 @@ class CalendarViewModel(
     private val ensureDefaultPeopleUseCase: EnsureDefaultPeopleUseCase,
     private val ensureDefaultCalendarsUseCase: EnsureDefaultCalendarsUseCase,
     getCurrentUserUseCase: GetCurrentUserUseCase,
+    private val getAllGoogleAccountsUseCase: GetAllGoogleAccountsUseCase,
 ) : ViewModel() {
     private val userId = getCurrentUserUseCase()
     private val dateRange = DateUtils.getDateRange()
@@ -71,6 +75,32 @@ class CalendarViewModel(
                 handleError("Failed to load users", exception)
                 emit(emptyList())
             }.shareIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                replay = 1,
+            )
+
+    private val googleAccounts =
+        getAllGoogleAccountsUseCase()
+            .catch { exception ->
+                handleError("Failed to load Google accounts", exception)
+                emit(emptyList())
+            }.shareIn(
+                scope = viewModelScope,
+                started = SharingStarted.WhileSubscribed(5000),
+                replay = 1,
+            )
+
+    /**
+     * Merges the local [users] list with [googleAccounts] so that the event
+     * editor always shows the real signed-in email instead of the dummy
+     * placeholder stored in Room.
+     */
+    private val accountsFlow =
+        combine(users, googleAccounts) { usersList, googleAccountsList ->
+            deriveAccounts(usersList, googleAccountsList)
+        }.distinctUntilChanged()
+            .shareIn(
                 scope = viewModelScope,
                 started = SharingStarted.WhileSubscribed(5000),
                 replay = 1,
@@ -129,17 +159,17 @@ class CalendarViewModel(
     val uiState =
         combine(
             _uiState,
-            users.distinctUntilChanged(),
+            accountsFlow.distinctUntilChanged(),
             holidays.distinctUntilChanged(),
             calendars.distinctUntilChanged(),
             events.distinctUntilChanged(),
-        ) { currentState, usersList, holidaysList, calendarsList, eventsList ->
+        ) { currentState, accountsList, holidaysList, calendarsList, eventsList ->
             val visibleEvents =
                 eventsList.filterNot { event ->
                     isLegacyDemoEvent(event.id, event.calendarId)
                 }
             currentState.copy(
-                accounts = usersList.toImmutableList(),
+                accounts = accountsList.toImmutableList(),
                 holidays = holidaysList.toImmutableList(),
                 calendars = calendarsList.toImmutableList(),
                 events = visibleEvents.toImmutableList(),
@@ -285,4 +315,33 @@ class CalendarViewModel(
         eventId: String,
         calendarId: String,
     ): Boolean = eventId.startsWith("ev_") && calendarId.startsWith("cal_")
+}
+
+/**
+ * Derives the enriched account list shown in the event editor dialogs.
+ *
+ * **When Google accounts are connected**: each [GoogleAccountLink] is mapped
+ * to a [User] so the real signed-in email is always displayed. The existing
+ * local user's `photoUrl` is reused where available.
+ *
+ * **When no Google accounts are connected**: the raw [users] list from Room
+ * is returned unchanged (typically a single dummy user with a blank email).
+ *
+ * This is a pure function to make it straightforward to unit-test independently
+ * of ViewModel lifecycle.
+ */
+internal fun deriveAccounts(
+    users: List<User>,
+    googleAccounts: List<GoogleAccountLink>,
+): List<User> {
+    if (googleAccounts.isEmpty()) return users
+    val localUser = users.firstOrNull()
+    return googleAccounts.map { account ->
+        User(
+            id = localUser?.id ?: "user_id",
+            name = account.displayName ?: localUser?.name ?: "Mom",
+            email = account.email,
+            photoUrl = localUser?.photoUrl ?: "",
+        )
+    }
 }

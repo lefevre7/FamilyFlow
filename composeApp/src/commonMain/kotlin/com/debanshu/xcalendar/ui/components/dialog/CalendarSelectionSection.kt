@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -30,7 +29,6 @@ import com.debanshu.xcalendar.common.noRippleClickable
 import com.debanshu.xcalendar.domain.model.Calendar
 import com.debanshu.xcalendar.domain.model.User
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
-import com.skydoves.landscapist.coil3.CoilImage
 import kotlinx.collections.immutable.ImmutableList
 
 /**
@@ -47,31 +45,6 @@ internal fun CalendarSelectionSection(
     var currentSelectedId by remember { mutableStateOf(selectedCalendarId) }
 
     Column(modifier = modifier) {
-        // User row with avatar
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 8.dp, start = 16.dp),
-        ) {
-            CoilImage(
-                imageModel = { user.photoUrl },
-                modifier =
-                    Modifier
-                        .size(24.dp)
-                        .clip(CircleShape),
-            )
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            Text(
-                text = user.email,
-                style = XCalendarTheme.typography.bodySmall,
-                color = XCalendarTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
         // Calendar list
         CalendarList(
             calendars = calendars,
