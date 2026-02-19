@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.debanshu.xcalendar.domain.model.Holiday
+import com.debanshu.xcalendar.domain.model.HolidayAnnotation
 import com.debanshu.xcalendar.ui.theme.XCalendarColors
 import com.debanshu.xcalendar.ui.theme.XCalendarTheme
 import kotlinx.datetime.Instant
@@ -36,19 +37,25 @@ import xcalendar.composeapp.generated.resources.Res
 import xcalendar.composeapp.generated.resources.ic_close
 import xcalendar.composeapp.generated.resources.ic_description
 import xcalendar.composeapp.generated.resources.ic_calendar_view_month
+import xcalendar.composeapp.generated.resources.ic_edit
 import xcalendar.composeapp.generated.resources.ic_location
+import xcalendar.composeapp.generated.resources.ic_notifications
 
 /**
- * Modal bottom sheet dialog showing holiday details.
- * Matches the EventDetailsDialog pattern for a consistent look and feel.
+ * Modal bottom sheet dialog showing holiday details with an edit option.
+ * Tapping the edit icon opens [HolidayAnnotationEditorSheet].
  *
  * @param holiday The holiday to display
+ * @param annotation Persisted user annotation, or null if none
+ * @param onEdit Callback invoked when the user taps the edit icon
  * @param onDismiss Callback when the sheet is dismissed
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HolidayDetailsDialog(
     holiday: Holiday,
+    annotation: HolidayAnnotation? = null,
+    onEdit: (Holiday) -> Unit = {},
     onDismiss: () -> Unit = {},
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -76,12 +83,13 @@ fun HolidayDetailsDialog(
         properties = ModalBottomSheetProperties(shouldDismissOnBackPress = true),
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
-            // Header row — close only (holidays are read-only)
+            // ── Header row: close (left) + edit (right) ───────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.Start,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
                     painter = painterResource(Res.drawable.ic_close),
@@ -89,11 +97,17 @@ fun HolidayDetailsDialog(
                     modifier = Modifier.clickable { onDismiss() },
                     tint = XCalendarTheme.colorScheme.onSurfaceVariant,
                 )
+                Icon(
+                    painter = painterResource(Res.drawable.ic_edit),
+                    contentDescription = "Edit holiday",
+                    modifier = Modifier.clickable { onEdit(holiday) },
+                    tint = XCalendarTheme.colorScheme.onSurfaceVariant,
+                )
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Holiday title with color indicator — matches EventTitleRow pattern
+            // ── Holiday title with color indicator ────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -115,23 +129,47 @@ fun HolidayDetailsDialog(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Date row
+            // ── Fixed: Date ───────────────────────────────────────────────────
             HolidayDetailRow(
                 icon = Res.drawable.ic_calendar_view_month,
                 text = formattedDate,
             )
 
-            // Country code row
+            // ── Fixed: Country code ───────────────────────────────────────────
             HolidayDetailRow(
                 icon = Res.drawable.ic_location,
                 text = holiday.countryCode.uppercase(),
             )
 
-            // Holiday type row
+            // ── Fixed: Holiday type ───────────────────────────────────────────
             HolidayDetailRow(
                 icon = Res.drawable.ic_description,
                 text = formattedType,
             )
+
+            // ── Annotation: Location ──────────────────────────────────────────
+            annotation?.location?.takeIf { it.isNotBlank() }?.let { loc ->
+                HolidayDetailRow(
+                    icon = Res.drawable.ic_location,
+                    text = loc,
+                )
+            }
+
+            // ── Annotation: Reminder ──────────────────────────────────────────
+            annotation?.reminderMinutes?.let { mins ->
+                HolidayDetailRow(
+                    icon = Res.drawable.ic_notifications,
+                    text = "$mins minutes before",
+                )
+            }
+
+            // ── Annotation: Notes/Description ─────────────────────────────────
+            annotation?.description?.takeIf { it.isNotBlank() }?.let { notes ->
+                HolidayDetailRow(
+                    icon = Res.drawable.ic_description,
+                    text = notes,
+                )
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
         }

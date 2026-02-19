@@ -5,6 +5,7 @@ import com.debanshu.xcalendar.data.localDataSource.CalendarDao
 import com.debanshu.xcalendar.data.localDataSource.CalendarSourceDao
 import com.debanshu.xcalendar.data.localDataSource.EventDao
 import com.debanshu.xcalendar.data.localDataSource.GoogleAccountDao
+import com.debanshu.xcalendar.data.localDataSource.HolidayAnnotationDao
 import com.debanshu.xcalendar.data.localDataSource.HolidayDao
 import com.debanshu.xcalendar.data.localDataSource.InboxItemDao
 import com.debanshu.xcalendar.data.localDataSource.PersonDao
@@ -129,6 +130,10 @@ class DataModule {
     @Single
     fun getGoogleAccountDao(appDatabase: AppDatabase): GoogleAccountDao =
         appDatabase.getGoogleAccountDao()
+
+    @Single
+    fun getHolidayAnnotationDao(appDatabase: AppDatabase): HolidayAnnotationDao =
+        appDatabase.getHolidayAnnotationDao()
 
     @Single
     fun provideHolidayStore(

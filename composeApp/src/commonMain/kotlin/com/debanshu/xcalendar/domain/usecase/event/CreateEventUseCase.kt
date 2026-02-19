@@ -1,5 +1,6 @@
 package com.debanshu.xcalendar.domain.usecase.event
 
+import com.debanshu.xcalendar.common.AppLogger
 import com.debanshu.xcalendar.domain.model.Event
 import com.debanshu.xcalendar.domain.model.EventSource
 import com.debanshu.xcalendar.domain.model.ExternalEvent
@@ -7,6 +8,7 @@ import com.debanshu.xcalendar.domain.notifications.ReminderScheduler
 import com.debanshu.xcalendar.domain.repository.IEventRepository
 import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
 import com.debanshu.xcalendar.domain.usecase.calendarSource.GetCalendarSourceUseCase
+import com.debanshu.xcalendar.domain.usecase.google.GetAllGoogleAccountsUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
 import com.debanshu.xcalendar.domain.util.DomainError
@@ -15,7 +17,6 @@ import com.debanshu.xcalendar.domain.util.EventValidationException
 import com.debanshu.xcalendar.domain.util.EventValidator
 import kotlinx.coroutines.flow.first
 import org.koin.core.annotation.Factory
-import kotlin.time.Clock
 
 @Factory
 class CreateEventUseCase(
@@ -25,6 +26,7 @@ class CreateEventUseCase(
     private val getReminderPreferencesUseCase: GetReminderPreferencesUseCase,
     private val reminderScheduler: ReminderScheduler,
     private val widgetUpdater: WidgetUpdater,
+    private val getAllGoogleAccountsUseCase: GetAllGoogleAccountsUseCase,
 ) {
     suspend operator fun invoke(event: Event): DomainResult<Unit> =
         try {
@@ -37,38 +39,51 @@ class CreateEventUseCase(
                 isAllDay = event.isAllDay,
             )
 
-            val source = getCalendarSourceUseCase(event.calendarId).first()
-            val now = Clock.System.now().toEpochMilliseconds()
-            val savedEvent =
-                if (source != null) {
-                    val external = event.toExternalEvent()
-                    val remote =
-                        syncManager.createEvent(
-                            accountId = source.providerAccountId,
-                            calendarId = source.providerCalendarId,
-                            event = external,
-                        )
+            val nowMillis = System.currentTimeMillis()
+            val calendarSource = getCalendarSourceUseCase(event.calendarId).first()
+            val googleAccounts = getAllGoogleAccountsUseCase().first()
+            val hasGoogleAccount = googleAccounts.isNotEmpty()
+
+            // 1C: When any Google account is connected, force source = GOOGLE so the event is
+            // immediately visible in the filtered view (EventRepository shows only GOOGLE when
+            // Google is connected). When no Google account exists use LOCAL.
+            val effectiveSource = if (hasGoogleAccount) EventSource.GOOGLE else EventSource.LOCAL
+
+            // 2A: Persist locally FIRST so the event is always saved regardless of network.
+            // Start with lastSyncedAt = 0L (pending sync).
+            val localEvent = event.copy(source = effectiveSource, lastSyncedAt = 0L)
+            eventRepository.addEvent(localEvent)
+
+            // Schedule reminders and refresh widget immediately after local save.
+            val prefs = getReminderPreferencesUseCase().first()
+            reminderScheduler.scheduleEvent(localEvent, prefs)
+            widgetUpdater.refreshTodayWidget()
+
+            // Attempt to sync to Google if this calendar has a CalendarSource mapping.
+            // On failure, the event stays local and the background sync job will retry.
+            if (calendarSource != null) {
+                try {
+                    val external = localEvent.toExternalEvent()
+                    val remote = syncManager.createEvent(
+                        accountId = calendarSource.providerAccountId,
+                        calendarId = calendarSource.providerCalendarId,
+                        event = external,
+                    )
                     if (remote != null) {
-                        event.copy(
-                            source = EventSource.GOOGLE,
+                        val synced = localEvent.copy(
                             externalId = remote.id,
                             externalUpdatedAt = remote.updatedAt,
-                            lastSyncedAt = now,
+                            lastSyncedAt = nowMillis,
                         )
-                    } else {
-                        event.copy(
-                            source = EventSource.GOOGLE,
-                            lastSyncedAt = 0L,
-                        )
+                        eventRepository.updateEvent(synced)
                     }
-                } else {
-                    event.copy(source = EventSource.LOCAL)
+                } catch (e: Exception) {
+                    AppLogger.w(e) { "CreateEventUseCase: Google sync failed for ${event.id}; " +
+                            "event saved locally with lastSyncedAt=0 — background sync will retry" }
+                    // Non-fatal: local copy is already persisted.
                 }
+            }
 
-            eventRepository.addEvent(savedEvent)
-            val prefs = getReminderPreferencesUseCase().first()
-            reminderScheduler.scheduleEvent(savedEvent, prefs)
-            widgetUpdater.refreshTodayWidget()
             DomainResult.Success(Unit)
         } catch (e: EventValidationException) {
             DomainResult.Error(DomainError.ValidationError(e.message ?: "Validation failed"))
@@ -88,3 +103,4 @@ class CreateEventUseCase(
             updatedAt = 0L,
         )
 }
+

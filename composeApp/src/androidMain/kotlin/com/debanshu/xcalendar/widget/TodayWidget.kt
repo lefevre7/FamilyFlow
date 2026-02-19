@@ -20,7 +20,13 @@ import androidx.glance.layout.width
 import androidx.glance.text.FontWeight
 import androidx.glance.text.Text
 import androidx.glance.text.TextStyle
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.glance.appwidget.cornerRadius
+import androidx.glance.background
+import androidx.glance.color.ColorProvider
+import androidx.glance.layout.fillMaxSize
 import com.debanshu.xcalendar.MainActivity
 import com.debanshu.xcalendar.domain.model.ScheduleFilter
 import com.debanshu.xcalendar.domain.usecase.event.GetEventsForDateRangeUseCase
@@ -52,7 +58,18 @@ class TodayWidget : GlanceAppWidget() {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             }
             val openTodayAction = actionStartActivity(openTodayIntent)
-            Column(modifier = GlanceModifier.fillMaxWidth().padding(12.dp)) {
+            Column(
+                modifier = GlanceModifier
+                    .fillMaxSize()
+                    .background(ColorProvider(day = WIDGET_BG_LIGHT, night = WIDGET_BG_DARK))
+                    .cornerRadius(WIDGET_CORNER_RADIUS.dp)
+                    .padding(12.dp),
+            ) {
+                Text(
+                    text = APP_NAME,
+                    style = TextStyle(fontSize = 11.sp),
+                    modifier = GlanceModifier.clickable(openTodayAction),
+                )
                 Text(
                     text = "Today",
                     style = TextStyle(fontWeight = FontWeight.Medium),
@@ -153,6 +170,13 @@ class TodayWidget : GlanceAppWidget() {
     }
 
     companion object {
+        const val APP_NAME = "Family Flow"
+        /** Corner radius in dp — matches the app's card rounding pattern. */
+        const val WIDGET_CORNER_RADIUS = 16
+        /** Light-mode bubble: primaryContainer pale lavender (#E8DBED) at 50% opacity. */
+        val WIDGET_BG_LIGHT = Color(0x80E8DBED)
+        /** Dark-mode bubble: primaryContainer muted purple (#594A62) at 50% opacity. */
+        val WIDGET_BG_DARK = Color(0x80594A62)
         const val EXTRA_QUICK_ADD_MODE = "extra_quick_add_mode"
 
         /** Intent extra key used to request navigation to a specific screen on launch. */

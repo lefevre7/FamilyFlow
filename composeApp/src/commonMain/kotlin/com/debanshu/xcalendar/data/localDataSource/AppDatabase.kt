@@ -6,6 +6,7 @@ import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.debanshu.xcalendar.data.localDataSource.CalendarSourceDao
 import com.debanshu.xcalendar.data.localDataSource.GoogleAccountDao
@@ -13,6 +14,7 @@ import com.debanshu.xcalendar.data.localDataSource.model.CalendarEntity
 import com.debanshu.xcalendar.data.localDataSource.model.CalendarSourceEntity
 import com.debanshu.xcalendar.data.localDataSource.model.EventEntity
 import com.debanshu.xcalendar.data.localDataSource.model.EventReminderEntity
+import com.debanshu.xcalendar.data.localDataSource.model.HolidayAnnotationEntity
 import com.debanshu.xcalendar.data.localDataSource.model.HolidayEntity
 import com.debanshu.xcalendar.data.localDataSource.model.InboxItemEntity
 import com.debanshu.xcalendar.data.localDataSource.model.GoogleAccountEntity
@@ -27,7 +29,7 @@ import com.debanshu.xcalendar.data.localDataSource.model.UserEntity
  * Current database version.
  * Increment this when making schema changes and add a migration.
  */
-const val DATABASE_VERSION = 4
+const val DATABASE_VERSION = 5
 
 const val DATABASE_NAME = "xcalendar.db"
 
@@ -46,6 +48,7 @@ const val DATABASE_NAME = "xcalendar.db"
         ProjectEntity::class,
         InboxItemEntity::class,
         GoogleAccountEntity::class,
+        HolidayAnnotationEntity::class,
     ],
     version = DATABASE_VERSION,
     exportSchema = true,
@@ -77,6 +80,8 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun getGoogleAccountDao(): GoogleAccountDao
 
+    abstract fun getHolidayAnnotationDao(): HolidayAnnotationDao
+
     companion object {
         /**
          * Array of all migrations.
@@ -86,14 +91,17 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
+            MIGRATION_4_5,
         )
     }
 }
 
 val MIGRATION_1_2 =
     object : Migration(1, 2) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) = doMigrate { db.execSQL(it) }
+        override fun migrate(connection: SQLiteConnection) = doMigrate { connection.prepare(it).use { stmt -> stmt.step() } }
+        private fun doMigrate(exec: (String) -> Unit) {
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS people (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -111,11 +119,11 @@ val MIGRATION_1_2 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_people_role ON people(role)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_people_isDefault ON people(isDefault)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_people_isArchived ON people(isArchived)")
+            exec("CREATE INDEX IF NOT EXISTS index_people_role ON people(role)")
+            exec("CREATE INDEX IF NOT EXISTS index_people_isDefault ON people(isDefault)")
+            exec("CREATE INDEX IF NOT EXISTS index_people_isArchived ON people(isArchived)")
 
-            db.execSQL(
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS routines (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -132,10 +140,10 @@ val MIGRATION_1_2 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_routines_assignedToPersonId ON routines(assignedToPersonId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_routines_isActive ON routines(isActive)")
+            exec("CREATE INDEX IF NOT EXISTS index_routines_assignedToPersonId ON routines(assignedToPersonId)")
+            exec("CREATE INDEX IF NOT EXISTS index_routines_isActive ON routines(isActive)")
 
-            db.execSQL(
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS projects (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -152,10 +160,10 @@ val MIGRATION_1_2 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_projects_ownerPersonId ON projects(ownerPersonId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_projects_status ON projects(status)")
+            exec("CREATE INDEX IF NOT EXISTS index_projects_ownerPersonId ON projects(ownerPersonId)")
+            exec("CREATE INDEX IF NOT EXISTS index_projects_status ON projects(status)")
 
-            db.execSQL(
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS tasks (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -181,12 +189,12 @@ val MIGRATION_1_2 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_assignedToPersonId ON tasks(assignedToPersonId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_projectId ON tasks(projectId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_routineId ON tasks(routineId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_tasks_status ON tasks(status)")
+            exec("CREATE INDEX IF NOT EXISTS index_tasks_assignedToPersonId ON tasks(assignedToPersonId)")
+            exec("CREATE INDEX IF NOT EXISTS index_tasks_projectId ON tasks(projectId)")
+            exec("CREATE INDEX IF NOT EXISTS index_tasks_routineId ON tasks(routineId)")
+            exec("CREATE INDEX IF NOT EXISTS index_tasks_status ON tasks(status)")
 
-            db.execSQL(
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS inbox_items (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -201,25 +209,27 @@ val MIGRATION_1_2 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_inbox_items_personId ON inbox_items(personId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_inbox_items_linkedTaskId ON inbox_items(linkedTaskId)")
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_inbox_items_status ON inbox_items(status)")
+            exec("CREATE INDEX IF NOT EXISTS index_inbox_items_personId ON inbox_items(personId)")
+            exec("CREATE INDEX IF NOT EXISTS index_inbox_items_linkedTaskId ON inbox_items(linkedTaskId)")
+            exec("CREATE INDEX IF NOT EXISTS index_inbox_items_status ON inbox_items(status)")
         }
     }
 
 val MIGRATION_2_3 =
     object : Migration(2, 3) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
+        override fun migrate(db: SupportSQLiteDatabase) = doMigrate { db.execSQL(it) }
+        override fun migrate(connection: SQLiteConnection) = doMigrate { connection.prepare(it).use { stmt -> stmt.step() } }
+        private fun doMigrate(exec: (String) -> Unit) {
+            exec(
                 """
                 ALTER TABLE events ADD COLUMN source TEXT NOT NULL DEFAULT 'LOCAL'
                 """.trimIndent()
             )
-            db.execSQL("ALTER TABLE events ADD COLUMN externalId TEXT")
-            db.execSQL("ALTER TABLE events ADD COLUMN externalUpdatedAt INTEGER")
-            db.execSQL("ALTER TABLE events ADD COLUMN lastSyncedAt INTEGER")
+            exec("ALTER TABLE events ADD COLUMN externalId TEXT")
+            exec("ALTER TABLE events ADD COLUMN externalUpdatedAt INTEGER")
+            exec("ALTER TABLE events ADD COLUMN lastSyncedAt INTEGER")
 
-            db.execSQL(
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS google_accounts (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -232,9 +242,9 @@ val MIGRATION_2_3 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_google_accounts_personId ON google_accounts(personId)")
+            exec("CREATE INDEX IF NOT EXISTS index_google_accounts_personId ON google_accounts(personId)")
 
-            db.execSQL(
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS calendar_sources (
                     calendarId TEXT NOT NULL PRIMARY KEY,
@@ -247,17 +257,19 @@ val MIGRATION_2_3 =
                 )
                 """.trimIndent()
             )
-            db.execSQL("CREATE INDEX IF NOT EXISTS index_calendar_sources_providerAccountId ON calendar_sources(providerAccountId)")
+            exec("CREATE INDEX IF NOT EXISTS index_calendar_sources_providerAccountId ON calendar_sources(providerAccountId)")
         }
     }
 
 val MIGRATION_3_4 =
     object : Migration(3, 4) {
-        override fun migrate(db: SupportSQLiteDatabase) {
+        override fun migrate(db: SupportSQLiteDatabase) = doMigrate { db.execSQL(it) }
+        override fun migrate(connection: SQLiteConnection) = doMigrate { connection.prepare(it).use { stmt -> stmt.step() } }
+        private fun doMigrate(exec: (String) -> Unit) {
             // Drop and recreate holidays table to add holidayType and translations fields
             // This clears cached Calendarific (India) data and prepares for Enrico (USA/Utah) API
-            db.execSQL("DROP TABLE IF EXISTS holidays")
-            db.execSQL(
+            exec("DROP TABLE IF EXISTS holidays")
+            exec(
                 """
                 CREATE TABLE IF NOT EXISTS holidays (
                     id TEXT NOT NULL PRIMARY KEY,
@@ -266,6 +278,26 @@ val MIGRATION_3_4 =
                     countryCode TEXT NOT NULL,
                     holidayType TEXT NOT NULL,
                     translations TEXT NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
+val MIGRATION_4_5 =
+    object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) = doMigrate { db.execSQL(it) }
+        override fun migrate(connection: SQLiteConnection) = doMigrate { connection.prepare(it).use { stmt -> stmt.step() } }
+        private fun doMigrate(exec: (String) -> Unit) {
+            exec(
+                """
+                CREATE TABLE IF NOT EXISTS holiday_annotations (
+                    holidayId TEXT NOT NULL PRIMARY KEY,
+                    description TEXT,
+                    location TEXT,
+                    reminderMinutes INTEGER,
+                    affectedPersonIds TEXT NOT NULL,
+                    updatedAt INTEGER NOT NULL
                 )
                 """.trimIndent()
             )

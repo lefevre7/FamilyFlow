@@ -3,6 +3,7 @@ package com.debanshu.xcalendar.features
 import com.debanshu.xcalendar.MainActivity
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -11,6 +12,7 @@ import com.debanshu.xcalendar.util.assertAnyNodeWithTextExists
 import com.debanshu.xcalendar.util.clickFirstNodeWithTextIfExists
 import com.debanshu.xcalendar.util.navigateToScreen
 import com.debanshu.xcalendar.util.performScrollToSafely
+import com.debanshu.xcalendar.util.waitUntilExists
 import org.junit.Rule
 import org.junit.Test
 
@@ -35,7 +37,8 @@ class PeopleFeatureTest {
         // Navigate to People, verify Mom + partner + 3 kids appear
         composeRule.navigateToScreen( "People")
 
-        composeRule.waitForIdle()
+        // Wait for async people data to load from DB before asserting
+        composeRule.waitUntilExists(hasText("Partner", substring = true), timeoutMillis = 8000)
 
         // Verify default profiles
         composeRule.assertAnyNodeWithTextExists("Mom", substring = true, ignoreCase = false)
@@ -48,7 +51,8 @@ class PeopleFeatureTest {
         // Click on person profile, verify edit dialog opens
         composeRule.navigateToScreen( "People")
 
-        composeRule.waitForIdle()
+        // Wait for async people data to load from DB before clicking Edit
+        composeRule.waitUntilExists(hasText("Edit", substring = false), timeoutMillis = 8000)
 
         // Click any Edit action
         composeRule.clickFirstNodeWithTextIfExists("Edit", substring = false, ignoreCase = false)
@@ -93,7 +97,8 @@ class PeopleFeatureTest {
         // Navigate to People, verify role labels (Parent, Child) appear
         composeRule.navigateToScreen("People")
 
-        composeRule.waitForIdle()
+        // Wait for async people data to load from DB before asserting
+        composeRule.waitUntilExists(hasText("Mom", substring = false), timeoutMillis = 8000)
 
         // Verify role labels used by current UI
         composeRule.assertAnyNodeWithTextExists("Mom", substring = false, ignoreCase = false)

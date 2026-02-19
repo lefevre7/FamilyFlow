@@ -1,6 +1,7 @@
 package com.debanshu.xcalendar.features
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import com.debanshu.xcalendar.MainActivity
 import com.debanshu.xcalendar.util.clickFirstNodeWithTextIfExists
 import com.debanshu.xcalendar.util.navigateToScreen
+import com.debanshu.xcalendar.util.waitUntilExists
 import org.junit.Rule
 import org.junit.Test
 
@@ -44,7 +46,7 @@ class GlobalSelectionVisualFeatureTest {
         composeRule.onNodeWithContentDescription("Selected person Family", useUnmergedTree = true).assertIsDisplayed()
 
         composeRule.clickFirstNodeWithTextIfExists("Mom Focus", substring = true, ignoreCase = true)
-        composeRule.waitForIdle()
+        composeRule.waitUntilExists(hasContentDescription("Selected person Mom Focus", ignoreCase = false), timeoutMillis = 5000)
         composeRule.onNodeWithContentDescription("Selected person Mom Focus", useUnmergedTree = true).assertIsDisplayed()
     }
 }

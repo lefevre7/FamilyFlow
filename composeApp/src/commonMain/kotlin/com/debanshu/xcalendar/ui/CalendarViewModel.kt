@@ -8,6 +8,7 @@ import com.debanshu.xcalendar.domain.repository.ICalendarRepository
 import com.debanshu.xcalendar.domain.repository.IEventRepository
 import com.debanshu.xcalendar.domain.repository.IUserRepository
 import com.debanshu.xcalendar.domain.states.CalendarUiState
+import com.debanshu.xcalendar.domain.usecase.calendar.EnsureDefaultCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.calendar.GetUserCalendarsUseCase
 import com.debanshu.xcalendar.domain.usecase.event.GetEventsForDateRangeUseCase
 import com.debanshu.xcalendar.domain.usecase.holiday.GetHolidaysForYearUseCase
@@ -51,6 +52,7 @@ class CalendarViewModel(
     private val refreshHolidaysUseCase: RefreshHolidaysUseCase,
     private val getHolidayPreferencesUseCase: GetHolidayPreferencesUseCase,
     private val ensureDefaultPeopleUseCase: EnsureDefaultPeopleUseCase,
+    private val ensureDefaultCalendarsUseCase: EnsureDefaultCalendarsUseCase,
     getCurrentUserUseCase: GetCurrentUserUseCase,
 ) : ViewModel() {
     private val userId = getCurrentUserUseCase()
@@ -225,7 +227,11 @@ class CalendarViewModel(
 
     private suspend fun initializeCalendars() {
         runCatching {
+            // refreshCalendarsForUser is a no-op (demo API disabled in production).
+            // EnsureDefaultCalendarsUseCase guarantees at least one local calendar exists
+            // when no Google account is connected.
             calendarRepository.refreshCalendarsForUser(userId)
+            ensureDefaultCalendarsUseCase()
         }.onFailure { exception ->
             handleError("Failed to initialize calendars", exception)
         }

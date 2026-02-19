@@ -11,6 +11,9 @@ import com.debanshu.xcalendar.domain.sync.CalendarSyncManager
 import com.debanshu.xcalendar.domain.usecase.calendarSource.GetCalendarSourceUseCase
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
 import com.debanshu.xcalendar.domain.widgets.WidgetUpdater
+import com.debanshu.xcalendar.domain.model.GoogleAccountLink
+import com.debanshu.xcalendar.domain.repository.IGoogleAccountRepository
+import com.debanshu.xcalendar.domain.usecase.google.GetAllGoogleAccountsUseCase
 import com.debanshu.xcalendar.domain.usecase.event.CreateEventUseCase
 import com.debanshu.xcalendar.domain.usecase.event.DeleteEventUseCase
 import com.debanshu.xcalendar.domain.usecase.event.UpdateEventUseCase
@@ -146,6 +149,14 @@ class EventViewModelTest {
         override suspend fun refreshTodayWidget() = Unit
     }
 
+    private class FakeGoogleAccountRepository : IGoogleAccountRepository {
+        override fun getAccountForPerson(personId: String): kotlinx.coroutines.flow.Flow<GoogleAccountLink?> = flowOf(null)
+        override fun getAllAccounts(): kotlinx.coroutines.flow.Flow<List<GoogleAccountLink>> = flowOf(emptyList())
+        override suspend fun getAccountById(accountId: String): GoogleAccountLink? = null
+        override suspend fun upsertAccount(account: GoogleAccountLink) = Unit
+        override suspend fun deleteAccount(account: GoogleAccountLink) = Unit
+    }
+
     private val calendarSourceRepository = FakeCalendarSourceRepository()
     private val getCalendarSourceUseCase = GetCalendarSourceUseCase(calendarSourceRepository)
     private val calendarSyncManager = FakeCalendarSyncManager()
@@ -183,6 +194,7 @@ class EventViewModelTest {
                     getReminderPreferencesUseCase,
                     reminderScheduler,
                     widgetUpdater,
+                    GetAllGoogleAccountsUseCase(FakeGoogleAccountRepository()),
                 ),
             updateEventUseCase =
                 UpdateEventUseCase(

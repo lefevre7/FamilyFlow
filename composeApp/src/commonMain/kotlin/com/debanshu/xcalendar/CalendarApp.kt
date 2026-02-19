@@ -38,7 +38,9 @@ import com.debanshu.xcalendar.ui.components.dialog.QuickAddSheet
 import com.debanshu.xcalendar.ui.components.dialog.AddEventDialog
 import com.debanshu.xcalendar.ui.components.dialog.EditEventDialog
 import com.debanshu.xcalendar.ui.components.dialog.EventDetailsDialog
+import com.debanshu.xcalendar.ui.components.dialog.HolidayAnnotationEditorSheet
 import com.debanshu.xcalendar.ui.components.dialog.HolidayDetailsDialog
+import com.debanshu.xcalendar.domain.model.HolidayAnnotation
 import com.debanshu.xcalendar.domain.repository.IDateSelectionPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IUiPreferencesRepository
 import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
@@ -58,9 +60,13 @@ import com.debanshu.xcalendar.domain.model.Holiday
 import com.debanshu.xcalendar.domain.model.ReminderPreferences
 import com.debanshu.xcalendar.domain.util.RecurringEventEditResolver
 import com.debanshu.xcalendar.domain.usecase.settings.GetReminderPreferencesUseCase
+import com.debanshu.xcalendar.domain.usecase.holiday.DeleteHolidayAnnotationUseCase
+import com.debanshu.xcalendar.domain.usecase.holiday.GetHolidayAnnotationUseCase
+import com.debanshu.xcalendar.domain.usecase.holiday.SaveHolidayAnnotationUseCase
 import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.serialization.modules.SerializersModule
 import kotlinx.serialization.modules.polymorphic
 import org.koin.compose.koinInject
@@ -177,6 +183,9 @@ private fun CalendarApp(
         .collectAsState(initial = true)
     val showDragHint = !navDragHintDismissed
     val scope = rememberCoroutineScope()
+    val getHolidayAnnotationUseCase = koinInject<GetHolidayAnnotationUseCase>()
+    val saveHolidayAnnotationUseCase = koinInject<SaveHolidayAnnotationUseCase>()
+    val deleteHolidayAnnotationUseCase = koinInject<DeleteHolidayAnnotationUseCase>()
     val quickAddRequest = quickAddRequests?.collectAsState(initial = null)?.value
 
     LaunchedEffect(quickAddRequest) {
@@ -207,6 +216,17 @@ private fun CalendarApp(
 
     // Selected holiday drives HolidayDetailsDialog visibility
     var selectedHoliday by remember { mutableStateOf<Holiday?>(null) }
+    // Holiday pending edit opens HolidayAnnotationEditorSheet
+    var holidayEditRequest by remember { mutableStateOf<Holiday?>(null) }
+    // Reactively load annotation for the selected/editing holiday
+    val selectedHolidayId = selectedHoliday?.id ?: holidayEditRequest?.id
+    val selectedHolidayAnnotation by remember(selectedHolidayId) {
+        if (selectedHolidayId != null) {
+            getHolidayAnnotationUseCase(selectedHolidayId)
+        } else {
+            kotlinx.coroutines.flow.flowOf(null)
+        }
+    }.collectAsState(initial = null)
 
     val visibleCalendars by remember(calendarUiState.calendars) {
         derivedStateOf { calendarUiState.calendars.filter { it.isVisible } }
@@ -460,7 +480,28 @@ private fun CalendarApp(
                 selectedHoliday?.let { holiday ->
                     HolidayDetailsDialog(
                         holiday = holiday,
+                        annotation = selectedHolidayAnnotation,
+                        onEdit = { h ->
+                            holidayEditRequest = h
+                            selectedHoliday = null
+                        },
                         onDismiss = { selectedHoliday = null },
+                    )
+                }
+
+                holidayEditRequest?.let { holiday ->
+                    HolidayAnnotationEditorSheet(
+                        holiday = holiday,
+                        existingAnnotation = selectedHolidayAnnotation,
+                        onSave = { annotation ->
+                            scope.launch { saveHolidayAnnotationUseCase(annotation) }
+                            holidayEditRequest = null
+                        },
+                        onReset = {
+                            scope.launch { deleteHolidayAnnotationUseCase(holiday.id) }
+                            holidayEditRequest = null
+                        },
+                        onDismiss = { holidayEditRequest = null },
                     )
                 }
             }
