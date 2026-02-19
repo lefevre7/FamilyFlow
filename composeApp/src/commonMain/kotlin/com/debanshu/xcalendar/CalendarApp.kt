@@ -94,6 +94,8 @@ private data class EventEditRequest(
 fun CalendarApp(
     quickAddRequests: Flow<QuickAddMode?>? = null,
     onQuickAddHandled: (() -> Unit)? = null,
+    navigateRequests: Flow<Boolean?>? = null,
+    onNavigateHandled: (() -> Unit)? = null,
     showOnboardingInitially: Boolean = false,
     onOnboardingCompleted: (() -> Unit)? = null,
 ) {
@@ -127,6 +129,8 @@ fun CalendarApp(
         uiPreferencesRepository = uiPreferencesRepository,
         quickAddRequests = quickAddRequests,
         onQuickAddHandled = onQuickAddHandled,
+        navigateRequests = navigateRequests,
+        onNavigateHandled = onNavigateHandled,
         showOnboardingInitially = showOnboardingInitially,
         onOnboardingCompleted = onOnboardingCompleted,
         reminderPreferences = reminderPreferences,
@@ -146,6 +150,8 @@ private fun CalendarApp(
     uiPreferencesRepository: IUiPreferencesRepository,
     quickAddRequests: Flow<QuickAddMode?>? = null,
     onQuickAddHandled: (() -> Unit)? = null,
+    navigateRequests: Flow<Boolean?>? = null,
+    onNavigateHandled: (() -> Unit)? = null,
     showOnboardingInitially: Boolean = false,
     onOnboardingCompleted: (() -> Unit)? = null,
     reminderPreferences: ReminderPreferences = ReminderPreferences(),
@@ -178,6 +184,15 @@ private fun CalendarApp(
             quickAddMode = quickAddRequest
             showQuickAddSheet = true
             onQuickAddHandled?.invoke()
+        }
+    }
+
+    // Navigate to Today when requested from a widget tap or notification tap.
+    val navigateRequest = navigateRequests?.collectAsState(initial = null)?.value
+    LaunchedEffect(navigateRequest) {
+        if (navigateRequest == true) {
+            backStack.replaceLast(NavigableScreen.Today)
+            onNavigateHandled?.invoke()
         }
     }
 

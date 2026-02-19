@@ -47,20 +47,28 @@ class TodayWidget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val items = loadItems()
         provideContent {
+            val openTodayIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra(EXTRA_NAVIGATE_TO, DESTINATION_TODAY)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val openTodayAction = actionStartActivity(openTodayIntent)
             Column(modifier = GlanceModifier.fillMaxWidth().padding(12.dp)) {
                 Text(
                     text = "Today",
                     style = TextStyle(fontWeight = FontWeight.Medium),
+                    modifier = GlanceModifier.clickable(openTodayAction),
                 )
                 if (items.isEmpty()) {
                     Text(
                         text = "You are clear for now.",
                         style = TextStyle(),
+                        modifier = GlanceModifier.clickable(openTodayAction),
                     )
                 } else {
                     items.forEach { item ->
                         Row(
-                            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp),
+                            modifier = GlanceModifier.fillMaxWidth().padding(vertical = 4.dp)
+                                .clickable(openTodayAction),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Text(
@@ -146,6 +154,12 @@ class TodayWidget : GlanceAppWidget() {
 
     companion object {
         const val EXTRA_QUICK_ADD_MODE = "extra_quick_add_mode"
+
+        /** Intent extra key used to request navigation to a specific screen on launch. */
+        const val EXTRA_NAVIGATE_TO = "extra_navigate_to"
+
+        /** Value for [EXTRA_NAVIGATE_TO] that navigates to the Today screen. */
+        const val DESTINATION_TODAY = "today"
     }
 }
 

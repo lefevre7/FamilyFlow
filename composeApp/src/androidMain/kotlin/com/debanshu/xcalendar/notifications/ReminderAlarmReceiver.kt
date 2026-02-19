@@ -6,6 +6,7 @@ import android.content.Intent
 import android.app.PendingIntent
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import com.debanshu.xcalendar.MainActivity
 import com.debanshu.xcalendar.R
 import com.debanshu.xcalendar.domain.model.ScheduleFilter
 import com.debanshu.xcalendar.domain.notifications.AndroidReminderScheduler
@@ -16,6 +17,7 @@ import com.debanshu.xcalendar.domain.usecase.user.GetCurrentUserUseCase
 import com.debanshu.xcalendar.domain.usecase.event.GetEventsForDateRangeUseCase
 import com.debanshu.xcalendar.domain.util.ScheduleEngine
 import com.debanshu.xcalendar.ui.utils.DateTimeFormatter
+import com.debanshu.xcalendar.widget.TodayWidget
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -96,6 +98,21 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(notificationText))
                 .setAutoCancel(true)
                 .setPriority(NotificationCompat.PRIORITY_HIGH)
+
+        // Tapping the snapshot notification opens the app directly to the Today screen.
+        if (kind == ReminderConstants.KIND_SUMMARY) {
+            val openTodayIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra(TodayWidget.EXTRA_NAVIGATE_TO, TodayWidget.DESTINATION_TODAY)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            val openTodayPending = PendingIntent.getActivity(
+                context,
+                "today_snapshot_open".hashCode(),
+                openTodayIntent,
+                pendingIntentFlags(),
+            )
+            builder.setContentIntent(openTodayPending)
+        }
 
         if (kind != ReminderConstants.KIND_SUMMARY) {
             builder.addAction(0, "Snooze 10m", snoozePending)

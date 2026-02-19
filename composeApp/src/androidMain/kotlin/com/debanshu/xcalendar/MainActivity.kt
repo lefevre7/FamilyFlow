@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class MainActivity : ComponentActivity() {
     private val quickAddRequests = MutableStateFlow<QuickAddMode?>(null)
+    private val navigateRequests = MutableStateFlow<Boolean?>(null)
     private val onboardingPrefs by lazy {
         getSharedPreferences(ONBOARDING_PREFS_NAME, MODE_PRIVATE)
     }
@@ -23,6 +24,8 @@ class MainActivity : ComponentActivity() {
             CalendarApp(
                 quickAddRequests = quickAddRequests,
                 onQuickAddHandled = { quickAddRequests.value = null },
+                navigateRequests = navigateRequests,
+                onNavigateHandled = { navigateRequests.value = null },
                 showOnboardingInitially = !hasCompletedOnboarding,
                 onOnboardingCompleted = {
                     onboardingPrefs.edit().putBoolean(KEY_ONBOARDING_COMPLETED, true).apply()
@@ -37,8 +40,15 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: android.content.Intent?) {
-        val mode = intent?.getStringExtra(TodayWidget.EXTRA_QUICK_ADD_MODE) ?: return
-        quickAddRequests.value = runCatching { QuickAddMode.valueOf(mode) }.getOrNull()
+        intent ?: return
+        val mode = intent.getStringExtra(TodayWidget.EXTRA_QUICK_ADD_MODE)
+        if (mode != null) {
+            quickAddRequests.value = runCatching { QuickAddMode.valueOf(mode) }.getOrNull()
+        }
+        val destination = intent.getStringExtra(TodayWidget.EXTRA_NAVIGATE_TO)
+        if (destination == TodayWidget.DESTINATION_TODAY) {
+            navigateRequests.value = true
+        }
     }
 
     private companion object {
