@@ -3,6 +3,8 @@ package com.debanshu.xcalendar.flows
 import com.debanshu.xcalendar.MainActivity
 
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -52,12 +54,36 @@ class QuickAddFlowTest {
 
         composeRule.clickQuickAddFab()
 
+        // Wait for the sheet to open and the "Event" chip to be available
+        composeRule.waitUntil(3000) {
+            runCatching {
+                composeRule.onAllNodesWithText("Event", substring = false, ignoreCase = false, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }.getOrElse { false }
+        }
+
         // Select Event mode
         composeRule.clickFirstNodeWithTextIfExists("Event", substring = false, ignoreCase = false)
 
-        // Verify event mode content appears
-        composeRule.assertAnyNodeWithTextExists("Create a timed event", substring = true, ignoreCase = true)
+        // Wait for EVENT mode card to appear (state propagates through CalendarApp → QuickAddSheet)
+        composeRule.waitUntil(3000) {
+            runCatching {
+                composeRule.onAllNodesWithText("Create a timed event", substring = true, ignoreCase = true, useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }.getOrElse { false }
+        }
+
+        // Now open the full event sheet
         composeRule.onNodeWithText("Open event sheet").performClick()
+
+        // Wait for the AddEventDialog to open and render event_title_input
+        composeRule.waitUntil(3000) {
+            runCatching {
+                composeRule.onAllNodesWithTag("event_title_input", useUnmergedTree = true)
+                    .fetchSemanticsNodes().isNotEmpty()
+            }.getOrElse { false }
+        }
+
         composeRule.assertNodeWithTagExists("event_title_input")
     }
 
