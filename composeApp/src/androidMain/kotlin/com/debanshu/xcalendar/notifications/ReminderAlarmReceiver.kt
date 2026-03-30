@@ -31,12 +31,21 @@ import org.koin.mp.KoinPlatform
 class ReminderAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val action = intent.action ?: return
+
+        // Snooze is purely synchronous (cancel notification + set alarm).
+        // Execute it directly on the broadcast-receiver thread — no goAsync() needed,
+        // and this prevents a race where the process could be killed before the
+        // background coroutine runs.
+        if (action == ReminderConstants.ACTION_SNOOZE) {
+            handleSnooze(context, intent)
+            return
+        }
+
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.Default).launch {
             try {
                 when (action) {
                     ReminderConstants.ACTION_REMINDER -> handleReminder(context, intent)
-                    ReminderConstants.ACTION_SNOOZE -> handleSnooze(intent)
                 }
             } finally {
                 pendingResult.finish()
@@ -77,6 +86,7 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 action = ReminderConstants.ACTION_SNOOZE
                 putExtra(ReminderConstants.EXTRA_ITEM_ID, itemId)
                 putExtra(ReminderConstants.EXTRA_ITEM_TYPE, itemType)
+                putExtra(ReminderConstants.EXTRA_KIND, kind)
                 putExtra(ReminderConstants.EXTRA_TITLE, title)
                 putExtra(ReminderConstants.EXTRA_START_TIME, startTime)
                 putExtra(ReminderConstants.EXTRA_END_TIME, endTime)
@@ -129,12 +139,18 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
         }
     }
 
-    private fun handleSnooze(intent: Intent) {
+    private fun handleSnooze(context: Context, intent: Intent) {
         val itemId = intent.getStringExtra(ReminderConstants.EXTRA_ITEM_ID) ?: return
         val itemType = intent.getStringExtra(ReminderConstants.EXTRA_ITEM_TYPE) ?: return
+        // Fall back to KIND_START for backwards-compat with any in-flight notifications
+        // that were created before this extra was added.
+        val kind = intent.getStringExtra(ReminderConstants.EXTRA_KIND) ?: ReminderConstants.KIND_START
         val title = intent.getStringExtra(ReminderConstants.EXTRA_TITLE).orEmpty()
         val startTime = intent.getLongExtra(ReminderConstants.EXTRA_START_TIME, 0L)
         val endTime = intent.getLongExtra(ReminderConstants.EXTRA_END_TIME, 0L)
+
+        // Schedule the snoozed alarm first so it is registered even if the cancel call below
+        // somehow fails (defensive ordering).
         val scheduler = KoinPlatform.getKoin().get<ReminderScheduler>()
         if (scheduler is AndroidReminderScheduler) {
             scheduler.scheduleSnooze(
@@ -143,8 +159,15 @@ class ReminderAlarmReceiver : BroadcastReceiver() {
                 title = title,
                 startTime = startTime,
                 endTime = endTime,
+                kind = kind,
             )
         }
+
+        // Dismiss the original notification immediately so the user receives clear,
+        // instant feedback that their snooze tap was acknowledged.  Without this,
+        // setAutoCancel(true) does NOT fire for action-button taps — the notification
+        // stays on screen and the user perceives the tap as having done nothing.
+        NotificationManagerCompat.from(context).cancel(notificationId(itemId, kind))
     }
 
     private suspend fun buildSummary(): String {

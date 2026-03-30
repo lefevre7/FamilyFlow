@@ -17,11 +17,13 @@ import com.debanshu.xcalendar.domain.repository.EventPeopleRepository
 import com.debanshu.xcalendar.domain.repository.IDateSelectionPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IEventPeopleRepository
 import com.debanshu.xcalendar.domain.repository.IHolidayPreferencesRepository
+import com.debanshu.xcalendar.domain.repository.IKitchenPlannerRepository
 import com.debanshu.xcalendar.domain.repository.ILensPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IUiPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.IVoiceDiagnosticsRepository
 import com.debanshu.xcalendar.domain.repository.HolidayPreferencesRepository
+import com.debanshu.xcalendar.domain.repository.KitchenPlannerRepository
 import com.debanshu.xcalendar.domain.repository.LensPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.ReminderPreferencesRepository
 import com.debanshu.xcalendar.domain.repository.UiPreferencesRepository
@@ -44,6 +46,7 @@ val androidPlatformModule =
         single<IDateSelectionPreferencesRepository> { DateSelectionPreferencesRepository() }
         single<IEventPeopleRepository> { EventPeopleRepository() }
         single<IHolidayPreferencesRepository> { HolidayPreferencesRepository() }
+        single<IKitchenPlannerRepository> { KitchenPlannerRepository() }
         single<ILensPreferencesRepository> { LensPreferencesRepository() }
         single<IReminderPreferencesRepository> { ReminderPreferencesRepository() }
         single<IUiPreferencesRepository> { UiPreferencesRepository() }

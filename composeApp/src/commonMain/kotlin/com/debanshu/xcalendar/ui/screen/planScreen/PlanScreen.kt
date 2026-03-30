@@ -68,6 +68,10 @@ import com.debanshu.xcalendar.domain.usecase.person.GetPeopleUseCase
 import com.debanshu.xcalendar.domain.usecase.project.GetProjectsUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.GetRoutinesUseCase
 import com.debanshu.xcalendar.domain.usecase.routine.UpsertRoutinesUseCase
+import com.debanshu.xcalendar.domain.llm.LocalLlmManager
+import com.debanshu.xcalendar.domain.repository.IKitchenPlannerRepository
+import com.debanshu.xcalendar.domain.usecase.kitchen.GenerateGroceryListUseCase
+import com.debanshu.xcalendar.domain.usecase.kitchen.GenerateMealPlanUseCase
 import com.debanshu.xcalendar.domain.usecase.task.CreateTaskUseCase
 import com.debanshu.xcalendar.domain.usecase.task.GetTasksUseCase
 import com.debanshu.xcalendar.domain.usecase.task.UpdateTaskScheduleUseCase
@@ -130,6 +134,10 @@ fun PlanScreen(
     val structureBrainDumpUseCase = koinInject<StructureBrainDumpUseCase>()
     val lensStateHolder = koinInject<LensStateHolder>()
     val notifier = koinInject<PlatformNotifier>()
+    val localLlmManager = koinInject<LocalLlmManager>()
+    val kitchenRepository = koinInject<IKitchenPlannerRepository>()
+    val generateMealPlanUseCase = koinInject<GenerateMealPlanUseCase>()
+    val generateGroceryListUseCase = koinInject<GenerateGroceryListUseCase>()
 
     val userId = remember { getCurrentUserUseCase() }
     val calendars by remember { getUserCalendarsUseCase(userId) }.collectAsState(initial = emptyList())
@@ -312,6 +320,14 @@ fun PlanScreen(
 
         ScanScheduleSection(
             onScan = { showOcrSheet = true },
+        )
+
+        KitchenPlannerSection(
+            kitchenRepository = kitchenRepository,
+            generateMealPlanUseCase = generateMealPlanUseCase,
+            generateGroceryListUseCase = generateGroceryListUseCase,
+            isLlmAvailable = localLlmManager.isAvailable,
+            notifier = notifier,
         )
 
         SuggestionSection(

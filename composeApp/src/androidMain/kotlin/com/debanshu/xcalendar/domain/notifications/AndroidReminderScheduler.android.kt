@@ -154,13 +154,18 @@ class AndroidReminderScheduler : ReminderScheduler {
         title: String,
         startTime: Long,
         endTime: Long,
+        /** Re-use the same kind as the original notification so that snoozing a KIND_PREP
+         *  notification does not accidentally overwrite the independently-scheduled KIND_START
+         *  alarm (they share the same [requestCode] key, so using a different kind keeps them
+         *  separate in the AlarmManager's PendingIntent registry). */
+        kind: String = ReminderConstants.KIND_START,
         minutes: Int = ReminderConstants.SNOOZE_MINUTES,
     ) {
         val atMillis = System.currentTimeMillis() + minutes * MINUTE_MILLIS
         scheduleReminder(
             itemId = itemId,
             itemType = itemType,
-            kind = ReminderConstants.KIND_START,
+            kind = kind,
             title = title,
             atMillis = atMillis,
             startTime = startTime,
